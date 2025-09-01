@@ -7,13 +7,13 @@ Cloudflare Workers, D1, R2환경에서 구동중인 코드.
 /playground
 > 가볍게 즐기는 AI챗봇
 
-- https://sekai-chat.eoe253326.workers.dev
-
+- https://sekaich.at
 
 
 ```
-git clone https://github.com/eoeoe22/sekai_chat.git
+git clone https://github.com/eoeoe22/sekaichat-public
 ```
+
 
 
 

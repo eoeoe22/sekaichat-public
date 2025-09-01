@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>로그인 - 세카이 채팅</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        /* 로그인 페이지에서 배경 움직임 효과 비활성화 (디자인/기능은 그대로) */
+        body, body::before, body::after,
+        .login-container, .login-container::before, .login-container::after {
+            animation: none !important;
+        }
+        /* 흔히 사용되는 배경 애니메이션 요소가 있다면 숨김 처리 */
+        .bg-animation, .bg-animate, .animated-background, .background-animation,
+        .moving-bg, .particles, #particles-js, .bg, .background {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h2>세카이 채팅</h2>
+                <p>로그인</p>
+            </div>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username" class="form-label">아이디</label>
+                    <input type="text" class="form-control" id="username" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password" class="form-label">비밀번호</label>
+                    <input type="password" class="form-control" id="password" name="password" required>
+                </div>
+                <div class="form-group">
+                    <div class="cf-turnstile" data-sitekey="0x4AAAAAABkrf7cd8w3d1nxe"></div>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">로그인</button>
+                <div class="text-center mt-3">
+                    <a href="/auth/discord" class="btn btn-primary w-100 mb-2" style="background-color: #5865F2;"><i class="bi bi-discord"></i> Discord로 로그인</a>
+                    <a href="/register" class="btn btn-secondary w-100">회원가입</a>
+                </div>
+            </form>
+            <div id="errorMessage" class="error-message mt-3" style="display: none;"></div>
+        </div>
+    </div>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <script src="/js/login.js"></script>
+</body>
+</html>
+

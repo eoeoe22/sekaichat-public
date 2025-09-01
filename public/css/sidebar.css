@@ -1,0 +1,543 @@
+/* =================================
+   SIDEBAR STYLES
+   ================================= */
+
+/* 사이드바 메인 스타일 */
+.sidebar {
+  width: 300px;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border-color);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-y: auto;
+  backdrop-filter: blur(20px);
+  box-shadow: 2px 0 20px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.sidebar.collapsed {
+  margin-left: -300px;
+}
+
+/* 사이드바 토글 버튼 */
+.sidebar-toggle {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  z-index: 1000;
+  background: var(--button-color);
+  border: none;
+  border-radius: 16px;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 6px 25px var(--shadow-color);
+  backdrop-filter: blur(10px);
+}
+
+.sidebar-toggle:hover {
+  background: var(--button-hover-color);
+  transform: scale(1.1) rotate(5deg);
+  box-shadow: 0 10px 35px var(--shadow-hover);
+}
+
+/* 대화 아이템 스타일 */
+.conversation-item {
+  padding: 14px;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 12px;
+  margin-bottom: 4px;
+}
+
+.conversation-item:hover {
+  background: rgba(116, 185, 255, 0.08);
+  transform: translateX(4px);
+  border-color: var(--button-color-solid);
+}
+
+.conversation-item.active {
+  background: var(--accent-gradient);
+  color: white;
+  border-color: transparent;
+  box-shadow: 0 4px 20px var(--shadow-color);
+}
+
+.conversation-item.active:hover {
+  background: var(--button-hover-color);
+  transform: translateX(0px);
+}
+
+.conversation-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.conversation-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-color);
+  cursor: pointer;
+  position: relative;
+}
+
+.conversation-title:hover {
+  color: var(--button-color-solid);
+}
+
+.conversation-title.editing {
+  display: none;
+}
+
+/* 참가자 아바타 */
+.participant-images {
+  display: flex;
+}
+
+.participant-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--card-bg);
+  margin-left: -8px; /* Increased overlap */
+}
+
+.participant-avatar-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: var(--sidebar-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  font-size: 12px;
+  font-weight: bold;
+  margin-left: -8px;
+}
+
+.delete-conversation {
+  color: #dc3545;
+  cursor: pointer;
+  transition: color 0.3s ease;
+}
+
+.delete-conversation:hover {
+  color: #c82333;
+}
+
+/* 캐릭터 선택 UI */
+.character-selection {
+  padding: 15px 20px;
+  background: var(--sidebar-bg);
+  border-top: 1px solid var(--button-color-solid);
+  border-bottom: 1px solid var(--border-color);
+  transition: background-color 0.3s ease;
+}
+
+.character-selection-header {
+  margin-bottom: 10px;
+}
+
+.character-selection-header h6 {
+  margin: 0;
+  color: var(--button-hover-color-solid);
+  font-weight: 600;
+}
+
+.character-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.character-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 2px solid var(--button-color-solid);
+  background: var(--surface-gradient);
+  color: var(--text-color);
+  border-radius: 24px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.character-btn:hover {
+  background: var(--accent-gradient);
+  color: white;
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 6px 25px var(--shadow-color);
+}
+
+.character-btn-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+/* 검색 기능 스타일 */
+.conversation-search {
+  margin-bottom: 15px;
+}
+
+.conversation-search .form-control {
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 14px;
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  transition: all 0.3s ease;
+}
+
+.conversation-search .form-control:focus {
+  border-color: var(--button-color-solid);
+  box-shadow: 0 0 0 3px rgba(116, 185, 255, 0.1);
+  background-color: var(--card-bg);
+}
+
+.conversation-search .btn-outline-secondary {
+  border-color: var(--border-color);
+  color: var(--text-color);
+  background-color: var(--card-bg);
+}
+
+.conversation-search .btn-outline-secondary:hover {
+  background-color: var(--sidebar-bg-solid);
+  border-color: var(--button-color-solid);
+}
+
+/* 즐겨찾기 관련 스타일 */
+.conversation-item.favorite {
+  background-color: rgba(255, 193, 7, 0.1);
+  border-left: 3px solid #ffc107;
+}
+
+.conversation-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.favorite-btn {
+  color: #666;
+  cursor: pointer;
+  transition: color 0.3s ease;
+  font-size: 16px;
+}
+
+.favorite-btn:hover {
+  color: #ffc107;
+}
+
+.favorite-btn.active {
+  color: #ffc107;
+}
+
+/* 제목 수정 관련 스타일 */
+.conversation-title-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.edit-title-btn {
+    background: none;
+    border: none;
+    color: var(--text-color);
+    opacity: 0.6;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+    font-size: 14px;
+}
+
+.edit-title-btn:hover {
+    opacity: 1;
+    background-color: var(--button-color);
+    color: var(--text-color);
+}
+
+.title-edit-input {
+  display: none;
+  font-size: 14px;
+  border: 1px solid var(--button-color-solid);
+  border-radius: 8px;
+  padding: 4px 8px;
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  width: 100%;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.title-edit-input.active {
+  display: block;
+}
+
+.title-edit-input:focus {
+  outline: none;
+  border-color: var(--button-hover-color-solid);
+  box-shadow: 0 0 0 3px var(--shadow-color);
+}
+
+/* 검색 결과 없음 표시 */
+.no-search-results {
+  text-align: center;
+  color: var(--text-color);
+  opacity: 0.6;
+  padding: 20px;
+  font-style: italic;
+}
+
+/* 사이드바 헤더 스타일 */
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0 20px 0;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 20px;
+}
+
+.sidebar-header h6 {
+  margin: 0;
+  color: var(--button-hover-color);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.sidebar-close-btn {
+  background: none;
+  border: none;
+  color: var(--text-color);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.sidebar-close-btn:hover {
+  background-color: var(--button-color);
+  color: var(--text-color);
+}
+
+/* 사이드바 Footer 스타일 (스크롤 영역과 통합) */
+.sidebar-footer {
+  margin-top: 30px; /* 기존 자동 밀림 제거 */
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
+  background-color: var(--sidebar-bg);
+  transition: background-color 0.3s ease;
+  /* flex-shrink 제거 및 margin-top:auto 제거로 자연 흐름 */
+}
+
+.sidebar-footer-content {
+  text-align: center;
+}
+
+.sidebar-footer-links {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.sidebar-footer-links span {
+  font-weight: 600;
+  color: var(--button-hover-color);
+  font-size: 14px;
+}
+
+.footer-link-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar-footer-links a {
+  color: var(--text-color);
+  text-decoration: none;
+  font-size: 13px;
+  transition: color 0.3s ease;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.sidebar-footer-links a:hover {
+  color: var(--button-color);
+  background-color: var(--button-color);
+  opacity: 0.1;
+}
+
+.sidebar-footeropyright,
+.sidebar-footer-copyright {
+  color: var(--text-color);
+  opacity: 0.7;
+  font-size: 11px;
+}
+
+/* 사이드바 스크롤 개선 (전체 사이드바 스크롤 사용, 개별 아코디언 스크롤 제거) */
+/* 이전: .sidebar .accordion { flex:1; overflow-y:auto; } 제거 */
+
+/* 필요 시 전체 커스텀 스크롤 */
+.sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+.sidebar::-webkit-scrollbar-track {
+  background: var(--sidebar-bg);
+}
+.sidebar::-webkit-scrollbar-thumb {
+  background: var(--button-color);
+  border-radius: 3px;
+}
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: var(--button-hover-color);
+}
+
+/* 접힘 시 Footer 숨김 */
+.sidebar.collapsed .sidebar-footer {
+  display: none;
+}
+
+/* 다크모드에서 즐겨찾기 스타일 조정 */
+@media (prefers-color-scheme: dark) {
+  .conversation-item.favorite {
+    background-color: rgba(255, 193, 7, 0.15);
+    border-left-color: #ffc107;
+  }
+  
+  .sidebar-footer {
+    border-top-color: var(--border-color);
+  }
+}
+
+/* 모바일 반응형 */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 100%;
+    position: fixed;
+    z-index: 999;
+    height: 100vh;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.2);
+  }
+  
+  .sidebar.collapsed {
+    margin-left: -100%;
+  }
+  
+  .sidebar-toggle {
+    display: block;
+    width: 50px;
+    height: 50px;
+  }
+  
+  .character-buttons {
+    justify-content: center;
+  }
+  
+  .conversation-title-container {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+    
+    .edit-title-btn {
+        align-self: flex-end;
+        margin-top: -8px;
+    }
+  
+  .sidebar-footer {
+    margin-top: 20px;
+    padding-top: 15px;
+  }
+  
+  .sidebar-footer-links span {
+    font-size: 13px;
+  }
+  
+  .sidebar-footer-links a {
+    font-size: 12px;
+    padding: 6px;
+  }
+  
+  .sidebar-footeropyright,
+  .sidebar-footer-copyright {
+    font-size: 10px;
+  }
+  
+  .footer-link-group {
+    gap: 6px;
+  }
+}
+
+/* 기존 플로팅 버튼 제거를 위한 스타일 수정 */
+.sidebar-toggle {
+  display: none; /* 기존 플로팅 버튼 완전 숨김 */
+}
+
+/* 사이드바 열기 버튼 */
+.sidebar-open-btn {
+  background: none;
+  border: none;
+  color: var(--text-color);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 8px;
+  margin-right: 10px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  opacity: 0;
+  transform: translateX(-20px);
+  animation: slideInLeft 0.5s ease forwards;
+}
+
+.sidebar-open-btn:hover {
+  background-color: var(--button-color);
+  opacity: 0.8;
+}
+
+/* 사이드바가 열려있을 때 버튼 숨기기 */
+.sidebar:not(.collapsed) ~ .chat-main .sidebar-open-btn {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 768px) {
+  .sidebar-open-btn {
+    font-size: 18px;
+    padding: 6px;
+  }
+}

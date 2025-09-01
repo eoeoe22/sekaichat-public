@@ -1,0 +1,1727 @@
+let currentConversationId = null;
+let userInfo = null;
+let lastUploadedImageData = null;
+let currentCharacters = [];
+let availableCharacters = [];
+let awaitingResponse = false;
+let autoCallInProgress = false;
+let currentWorkMode = false;
+let currentShowTime = true;
+let currentSituationPrompt = '';
+// ✅ 추가: 마크다운 표시 상태 (기본 false)
+let showMarkdown = false;
+// ✅ 추가: 이미지 생성 상태 (기본 false)
+let imageGenerationEnabled = false;
+// ✅ 추가: 호감도 시스템 상태 (기본 false)
+let affectionSystemEnabled = false;
+let autoReplyModeEnabled = false;
+let awaitingUserMessageResponse = false;
+let generationAbortController = null;
+
+// 🔧 이미지 생성 쿨다운 관리
+let lastImageGeneration = null;
+const IMAGE_COOLDOWN_SECONDS = 20;
+
+// 🔧 Gemini 오류 안내 시스템 메시지 (대체 텍스트)
+const GEMINI_ERROR_GUIDANCE = `<h4><i class="bi bi-question-circle-fill"></i> 원인</h4>
+<p>메시지 처리 중 오류가 발생하는 주요 원인은 다음과 같습니다.</p>
+
+<strong class="d-block mt-3"><i class="bi bi-geo-alt-fill"></i> Gemini 지역 제한 (가장 흔함)</strong>
+<p class="mt-2 mb-1 text-muted" style="font-size: 0.9rem;">이 사이트는 Cloudflare Workers를 기반으로 동작하며, 사용자의 위치에 따라 가장 가까운 서버에서 요청을 처리합니다. 간혹 홍콩 서버에서 요청이 처리될 수 있는데, Google Gemini는 홍콩 지역에서 이용할 수 없어 오류가 발생합니다.</p>
+<div class="alert alert-light mt-3">
+    <h5 class="alert-heading fs-6"><i class="bi bi-lightbulb-fill"></i> 해결 방법</h5>
+    <ul class="mb-0 ps-4">
+        <li>모바일 데이터 대신 Wi-Fi를 사용해보세요.</li>
+        <li>일본 또는 미국 VPN을 사용하는 것을 권장합니다.</li>
+    </ul>
+</div>
+
+<hr class="my-4">
+
+<strong class="d-block mt-3"><i class="bi bi-cone-striped"></i> Gemini API 사용량 제한</strong>
+<p class="mt-2 mb-1 text-muted" style="font-size: 0.9rem;">이 사이트의 AI 기능은 Gemini API를 사용하며, 시간당 사용량 제한이 있습니다. 짧은 시간 동안 많은 요청이 발생하면 일시적으로 사용이 제한될 수 있습니다.</p>
+<div class="alert alert-light mt-3">
+    <h5 class="alert-heading fs-6"><i class="bi bi-lightbulb-fill"></i> 해결 방법</h5>
+    <p class="mb-2">사용량 제한은 보통 1분 내외로 짧습니다. 잠시 후 다시 시도해주세요.</p>
+    <ul class="mb-0 ps-4">
+        <li>다른 Gemini 모델로 변경해보세요 (모델별로 사용량이 다르게 적용됩니다).</li>
+        <li>서버의 공용 API를 사용하는 경우, 여러 사용자가 동시에 사용하므로 제한에 더 자주 도달할 수 있습니다. 개인 API 키를 등록하면 더 쾌적하게 이용 가능합니다.</li>
+    </ul>
+</div>
+`;
+
+/* =========================
+   ✅ 전체 로딩 오버레이 관리 로직
+   ========================= */
+const globalLoadingState = {
+    user: false,
+    conversations: false,
+    notice: false,
+    minVisibleUntil: Date.now() + 400,
+    checkAndHide() {
+        if (this.user && this.conversations && this.notice && Date.now() >= this.minVisibleUntil) {
+            hideGlobalLoadingOverlay();
+        }
+    }
+};
+
+function hideGlobalLoadingOverlay() {
+    const overlay = document.getElementById('globalLoadingOverlay');
+    if (!overlay) return;
+    overlay.classList.add('fade-out');
+    setTimeout(() => {
+        if (overlay && overlay.parentNode) {
+            overlay.parentNode.removeChild(overlay);
+        }
+    }, 400);
+}
+
+function setupSidebarContentObservers() {
+    const convListEl = document.getElementById('conversationList');
+    const noticeEl = document.getElementById('noticeContent');
+
+    if (convListEl) {
+        const convObserver = new MutationObserver(() => {
+            if (!globalLoadingState.conversations) {
+                if (convListEl.childElementCount > 0 || convListEl.textContent.trim().length > 0) {
+                    globalLoadingState.conversations = true;
+                    globalLoadingState.checkAndHide();
+                }
+            }
+        });
+        convObserver.observe(convListEl, { childList: true, subtree: true, characterData: true });
+    }
+
+    if (noticeEl) {
+        const noticeObserver = new MutationObserver(() => {
+            if (!globalLoadingState.notice) {
+                if (noticeEl.textContent.trim().length > 0) {
+                    globalLoadingState.notice = true;
+                    globalLoadingState.checkAndHide();
+                }
+            }
+        });
+        noticeObserver.observe(noticeEl, { childList: true, subtree: true, characterData: true });
+    }
+
+    // 6초 강제 1차 제거 시도 (에러/빈 데이터 대비)
+    setTimeout(() => {
+        if (document.getElementById('globalLoadingOverlay')) {
+            if (!globalLoadingState.conversations) globalLoadingState.conversations = true;
+            if (!globalLoadingState.notice) globalLoadingState.notice = true;
+            globalLoadingState.checkAndHide();
+        }
+    }, 6000);
+
+    // 8초 최종 강제 제거
+    setTimeout(() => {
+        hideGlobalLoadingOverlay();
+    }, 8000);
+
+    // 공지가 정말 비어 있는 사이트일 경우 2.5초에 한 번 더 처리
+    setTimeout(() => {
+        const el = document.getElementById('noticeContent');
+        if (el && el.textContent.trim().length === 0 && !globalLoadingState.notice) {
+            globalLoadingState.notice = true;
+            globalLoadingState.checkAndHide();
+        }
+    }, 2500);
+}
+
+// 외부 스크립트에서 수동 호출 가능
+window.markConversationsLoaded = function() {
+    if (!globalLoadingState.conversations) {
+        globalLoadingState.conversations = true;
+        globalLoadingState.checkAndHide();
+    }
+};
+window.markNoticeLoaded = function() {
+    if (!globalLoadingState.notice) {
+        globalLoadingState.notice = true;
+        globalLoadingState.checkAndHide();
+    }
+};
+/* =========================
+   ✅ 전체 로딩 오버레이 관리 로직 끝
+   ========================= */
+
+// [추가] 대화 시작 안내/버튼 패널 관리 함수
+function updateStartConversationPanel() {
+    const panel = document.getElementById('startConversationPanel');
+    const chatMessages = document.getElementById('chatMessages');
+    const chatInput = document.querySelector('.chat-input');
+    
+    if (!currentConversationId) {
+        if (panel) panel.style.display = 'flex';
+        if (chatMessages) chatMessages.style.display = 'none';
+        if (chatInput) chatInput.style.display = 'none';
+    } else {
+        if (panel) panel.style.display = 'none';
+        if (chatMessages) chatMessages.style.display = '';
+        if (chatInput) chatInput.style.display = '';
+    }
+}
+
+// 이미지 생성 쿨다운 확인 함수
+function isImageGenerationOnCooldown() {
+    if (!lastImageGeneration) return false;
+    const now = Date.now();
+    const elapsed = now - lastImageGeneration;
+    return elapsed < (IMAGE_COOLDOWN_SECONDS * 1000);
+}
+
+// 남은 쿨다운 시간 계산 (초 단위)
+function getRemainingImageCooldown() {
+    if (!lastImageGeneration) return 0;
+    const now = Date.now();
+    const elapsed = now - lastImageGeneration;
+    const remaining = Math.max(0, (IMAGE_COOLDOWN_SECONDS * 1000) - elapsed);
+    return Math.ceil(remaining / 1000);
+}
+
+// 이미지 생성 쿨다운 설정
+function setImageGenerationCooldown() {
+    lastImageGeneration = Date.now();
+}
+
+// 이미지 생성 지원 캐릭터 확인
+function supportsImageGeneration(characterId, characterType) {
+    if (characterType === 'official') {
+        return characterId === 3 || characterId === 8;
+    } else if (characterType === 'user') {
+        return characterId >= 10000;
+    }
+    return false;
+}
+
+// 현재 대화에 이미지 생성 지원 캐릭터 있는지
+function hasImageGenerationSupport() {
+    return currentCharacters.some(char =>
+        supportsImageGeneration(char.id, char.type || 'official')
+    );
+}
+
+// 이미지 생성 UI 업데이트
+function updateImageGenerationUI() {
+    const imgGenToggle = document.getElementById('imageGenerationToggle');
+    const imgGenSection = document.querySelector('.image-toggle-section');
+    if (!imgGenToggle || !imgGenSection) return;
+
+    const hasSupport = hasImageGenerationSupport();
+    if (!hasSupport) {
+        imgGenToggle.disabled = true;
+        imgGenToggle.checked = false;
+        imageGenerationEnabled = false;
+        imgGenSection.style.opacity = '0.5';
+        imgGenSection.title = '현재 대화에 이미지 생성을 지원하는 캐릭터가 없습니다. (에나, 호나미, 또는 커스텀 캐릭터 필요)';
+    } else {
+        imgGenToggle.disabled = false;
+        imgGenSection.style.opacity = '1';
+        imgGenSection.title = '이미지 생성을 지원하는 캐릭터가 있습니다!';
+        if (!imageGenerationEnabled) {
+            imgGenToggle.checked = true;
+            imageGenerationEnabled = true;
+        }
+    }
+}
+
+// 페이지 로드 시 초기화
+document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        setupSidebarContentObservers();
+
+        const isAuthenticated = await checkAuthentication();
+        if (!isAuthenticated) {
+            window.location.href = '/login';
+            return;
+        }
+
+        await loadUserInfo();
+        await loadCharacters();
+
+        if (window.initializeSidebar) {
+            try { await window.initializeSidebar(); } catch(e){ console.error(e); }
+        }
+        if (window.initializeUserCharacters) {
+            try { await window.initializeUserCharacters(); } catch(e){ console.error(e); }
+        }
+        if (window.initializeKnowledgeBase) {
+            try { await window.initializeKnowledgeBase(); } catch(e){ console.error(e); }
+        }
+
+        // 기존 loadConversations 래핑
+        setTimeout(() => {
+            if (window.loadConversations && !window._wrappedLoadConversations) {
+                const original = window.loadConversations;
+                window.loadConversations = async function(...args) {
+                    const result = await original.apply(this, args);
+                    if (!globalLoadingState.conversations) {
+                        globalLoadingState.conversations = true;
+                        globalLoadingState.checkAndHide();
+                    }
+                    updateStartConversationPanel(); // [추가]
+                    return result;
+                };
+                window._wrappedLoadConversations = true;
+            }
+        }, 100);
+
+        setupEventListeners();
+        updateImageGenerationUI();
+
+        // 혹시 이미 DOM이 채워져 있는 경우 빠르게 체크
+        setTimeout(() => {
+            const convListEl = document.getElementById('conversationList');
+            if (convListEl && (convListEl.childElementCount > 0 || convListEl.textContent.trim().length > 0)) {
+                globalLoadingState.conversations = true;
+            }
+            const noticeEl = document.getElementById('noticeContent');
+            if (noticeEl && noticeEl.textContent.trim().length > 0) {
+                globalLoadingState.notice = true;
+            }
+            globalLoadingState.checkAndHide();
+            updateStartConversationPanel(); // [추가]
+        }, 300);
+
+        updateStartConversationPanel(); // [추가]
+
+        // [추가] 대화 시작하기 버튼 클릭 이벤트
+        const startBtn = document.getElementById('startConversationBtn');
+        if (startBtn) {
+            startBtn.addEventListener('click', async function() {
+                await startNewConversation();
+            });
+        }
+
+    } catch (error) {
+        console.error('초기화 중 오류:', error);
+        hideGlobalLoadingOverlay();
+        window.location.href = '/login';
+    }
+});
+
+// HTML 이스케이프 함수
+function escapeHtml(text) {
+    if (!text) return '';
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+    return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+// 긴 텍스트 처리 (강제 개행 포인트 삽입)
+function processLongText(text) {
+    return text.replace(/(\S{25,})/g, match => match.replace(/(.{15})/g, '$1&#8203;'));
+}
+
+// ✅ 안전하게 단순 이모지 제거
+function removeUnicodeEmojis(content) {
+    if (!content) return '';
+    return content.replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|[\u2600-\u26FF]|[\uD83C-\uDBFF][\uDC00-\uDFFF])/g, '');
+}
+
+// ✅ 마크다운 제거 함수
+function stripMarkdown(input) {
+    if (!input) return '';
+    let text = input;
+    text = text.replace(/``````/g, m => m.replace(/``````$/, ''));
+    text = text.replace(/`([^`]+)`/g, '$1');
+    text = text.replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1');
+    text = text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+    text = text.replace(/(\*\*|__)(.*?)\1/g, '$2');
+    text = text.replace(/(\*|_)(.*?)\1/g, '$2');
+    text = text.replace(/~~(.*?)~~/g, '$1');
+    text = text.replace(/^ {0,3}#{1,6}\s+/gm, '');
+    text = text.replace(/^ {0,3}>\s?/gm, '');
+    text = text.replace(/^ {0,3}([-*+])\s+/gm, '');
+    text = text.replace(/^ {0,3}\d+\.\s+/gm, '');
+    text = text.replace(/^ {0,3}(-{3,}|_{3,}|\*{3,})\s*$/gm, '');
+    text = text.replace(/^\|.*\|$/gm, line => line.replace(/\|/g, ' ').trim());
+    text = text.replace(/^\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+$/gm, '');
+    text = text.replace(/\\([\\`*_{}\[\]()#+\-.!>~|])/g, '$1');
+    text = text.replace(/[ \t]+\n/g, '\n');
+    text = text.replace(/\n{3,}/g, '\n\n');
+    return text.trim();
+}
+
+// ✅ 마크다운 → HTML
+function markdownToHtml(src) {
+    if (!src) return '';
+    let text = escapeHtml(src);
+    text = text.replace(/``````/g,
+        (m, lang, code) => `<pre class="md-code-block"><code>${escapeHtml(code).replace(/</g,'&lt;')}</code></pre>`);
+    text = text.replace(/`([^`]+)`/g, (m, code) => `<code.class="md-inline-code">${code}</code>`);
+    text = text.replace(/!\[([^\]]*)\]\([^)]+\)/g, (m, alt) => alt);
+    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, t) => `<span class="md-link-text">${t}</span>`);
+    text = text.replace(/(\*\*|__)(.*?)\1/g, '<strong>$2</strong>');
+    text = text.replace(/(\*|_)(.*?)\1/g, '<em>$2</em>');
+    text = text.replace(/~~(.*?)~~/g, '<del>$1</del>');
+    text = text.replace(/^ {0,3}###### (.*)$/gm, '<h6>$1</h6>');
+    text = text.replace(/^ {0,3}##### (.*)$/gm, '<h5>$1</h5>');
+    text = text.replace(/^ {0,3}#### (.*)$/gm, '<h4>$1</h4>');
+    text = text.replace(/^ {0,3}### (.*)$/gm, '<h3>$1</h3>');
+    text = text.replace(/^ {0,3}## (.*)$/gm, '<h2>$1</h2>');
+    text = text.replace(/^ {0,3}# (.*)$/gm, '<h1>$1</h1>');
+    text = text.replace(/^ {0,3}>\s?(.*)$/gm, '<blockquote>$1</blockquote>');
+    text = text.replace(/^ {0,3}(-{3,}|_{3,}|\*{3,})\s*$/gm, '<hr>');
+    text = text.replace(/^\|.*\|$/gm, '');
+    text = text.replace(/^\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+$/gm, '');
+    text = text.replace(/^(\d+)\.\s+(.*)$/gm, '<li data-ol="$1">$2</li>');
+    text = text.replace(/^ {0,3}[-*+]\s+(.*)$/gm, '<li>$1</li>');
+    text = text.replace(/(<li data-ol="\d+">.*?<\/li>)/gs, m => m);
+    text = text.replace(/((?:<li data-ol="\d+">.*?<\/li>\n?)+)/g, block => {
+        const replaced = block.replace(/data-ol="\d+"/g, '');
+        return `<ol>${replaced}</ol>`;
+    });
+    text = text.replace(/((?:<li>(?:(?!<\/li>)[\s\S])*?<\/li>\n?)+)/g, block => {
+        if (block.includes('<ol>') || block.includes('</ol>')) return block;
+        return `<ul>${block}</ul>`;
+    });
+    text = text.replace(/ data-ol="\d+"/g, '');
+    const paragraphs = text
+        .split(/\n{2,}/)
+        .map(p => (/^\s*(<h\d|<blockquote>|<ul>|<ol>|<pre|<hr>)/.test(p.trim())
+            ? p
+            : `<p>${p.trim().replace(/\n/g, '<br>')}</p>`))
+        .join('\n');
+    return paragraphs;
+}
+
+// ✅ 마크다운 모드 전체 적용
+function applyMarkdownMode() {
+    document.querySelectorAll('#chatMessages .message-bubble').forEach(bubble => {
+        const parentMsg = bubble.closest('.message');
+        if (!parentMsg) return;
+        const role =
+            parentMsg.classList.contains('assistant') ? 'assistant' :
+            parentMsg.classList.contains('user') ? 'user' :
+            parentMsg.classList.contains('system') ? 'system' : '';
+        const raw = bubble.getAttribute('data-raw');
+        if (raw == null) return;
+        if (!showMarkdown) {
+            bubble.textContent = stripMarkdown(raw);
+        } else {
+            if (role === 'system') {
+                bubble.textContent = stripMarkdown(raw);
+            } else {
+                bubble.innerHTML = markdownToHtml(raw);
+            }
+        }
+    });
+}
+
+// 인증 상태 확인
+async function checkAuthentication() {
+    try {
+        const response = await fetch('/api/user/info');
+        return response.ok;
+    } catch (error) {
+        console.error('인증 확인 실패:', error);
+        return false;
+    }
+}
+
+// 이벤트 리스너 설정
+function setupEventListeners() {
+    document.getElementById('sendButton').addEventListener('click', () => sendMessage('user'));
+    document.getElementById('situationButton').addEventListener('click', () => sendMessage('situation'));
+    document.getElementById('messageInput').addEventListener('keypress', e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+    document.getElementById('imageUploadBtn').addEventListener('click', () => {
+        if (!userInfo.has_api_key) {
+            alert('이미지 업로드는 개인 Gemini API 키가 등록된 사용자만 이용할 수 있습니다.');
+            return;
+        }
+        document.getElementById('imageInput').click();
+    });
+    document.getElementById('imageInput').addEventListener('change', handleImageUpload);
+    document.getElementById('inviteCharacterBtn').addEventListener('click', showInviteModal);
+
+    const modalSettingsContent = document.getElementById('modalSettingsContent');
+    const headerControlsContent = document.getElementById('headerControlsContent');
+    if (modalSettingsContent && headerControlsContent) {
+        modalSettingsContent.appendChild(headerControlsContent);
+        headerControlsContent.style.display = 'block';
+        headerControlsContent.classList.remove('collapsed');
+    }
+
+    document.getElementById('workModeToggle').addEventListener('change', handleWorkModeToggle);
+    document.getElementById('showTimeToggle').addEventListener('change', handleShowTimeToggle);
+    document.getElementById('emojiToggle').addEventListener('change', handleEmojiToggle);
+    document.getElementById('imageToggle').addEventListener('change', handleImageToggle);
+
+    document.getElementById('editTitleBtn').addEventListener('click', showEditTitleModal);
+    document.getElementById('saveTitleBtn').addEventListener('click', saveConversationTitle);
+
+    document.getElementById('situationPromptBtn').addEventListener('click', showSituationPromptModal);
+    document.getElementById('saveSituationBtn').addEventListener('click', saveSituationPrompt);
+    document.getElementById('clearSituationBtn').addEventListener('click', clearSituationPrompt);
+
+    const messageInput = document.getElementById('messageInput');
+    messageInput.addEventListener('input', autoResizeTextarea);
+
+    const mdToggle = document.getElementById('markdownToggle');
+    if (mdToggle) mdToggle.addEventListener('change', e => { showMarkdown = e.target.checked; applyMarkdownMode(); });
+
+    const imgGenToggle = document.getElementById('imageGenerationToggle');
+    if (imgGenToggle) imgGenToggle.addEventListener('change', e => {
+        imageGenerationEnabled = e.target.checked;
+        updateImageGenerationUI();
+    });
+
+    const affectionToggle = document.getElementById('affectionToggle');
+    if (affectionToggle) affectionToggle.addEventListener('change', handleAffectionToggle);
+
+    const affectionBtn = document.getElementById('affectionBtn');
+    if (affectionBtn) affectionBtn.addEventListener('click', showAffectionModal);
+
+    document.getElementById('autoReplyToggle').addEventListener('change', handleAutoReplyToggle);
+}
+
+// 텍스트에어리어 자동 크기 조절
+// 텍스트에어리어 자동 크기 조절
+function autoResizeTextarea() {
+    const controls = document.querySelector('.header-controls');
+    const icon = document.querySelector('#headerControlsToggle i');
+    const chatHeader = document.querySelector('.chat-header');
+    const content = document.getElementById('headerControlsContent');
+    const isCollapsed = controls.classList.contains('collapsed');
+
+    if (isCollapsed) {
+        controls.classList.remove('collapsed');
+        content.classList.remove('collapsed');
+        chatHeader.classList.add('expanded');
+        icon.className = 'bi bi-chevron-up';
+    } else {
+        controls.classList.add('collapsed');
+        content.classList.add('collapsed');
+        chatHeader.classList.remove('expanded');
+        icon.className = 'bi bi-chevron-down';
+    }
+}
+
+// 이모지 토글
+function handleEmojiToggle(e) {
+    const chatContainer = document.querySelector('.chat-container');
+    if (e.target.checked) chatContainer.classList.remove('hide-emojis');
+    else chatContainer.classList.add('hide-emojis');
+}
+
+// 이미지 토글
+function handleImageToggle(e) {
+    console.log('이미지 토글 상태:', e.target.checked);
+}
+
+// 작업 모드 토글
+async function handleWorkModeToggle(e) {
+    const isWorkMode = e.target.checked;
+    currentWorkMode = isWorkMode;
+    if (!currentConversationId) return;
+    try {
+        const response = await fetch(`/api/conversations/${currentConversationId}/work-mode`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workMode: isWorkMode })
+        });
+        if (response.ok) updateWorkModeUI(isWorkMode);
+        else {
+            e.target.checked = !isWorkMode;
+            currentWorkMode = !isWorkMode;
+        }
+    } catch {
+        e.target.checked = !isWorkMode;
+        currentWorkMode = !isWorkMode;
+    }
+}
+
+// 시간 정보 토글
+async function handleShowTimeToggle(e) {
+    const showTime = e.target.checked;
+    currentShowTime = showTime;
+    if (!currentConversationId) return;
+    try {
+        const response = await fetch(`/api/conversations/${currentConversationId}/show-time`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ showTime })
+        });
+        if (!response.ok) {
+            e.target.checked = !showTime;
+            currentShowTime = !showTime;
+        }
+    } catch {
+        e.target.checked = !showTime;
+        currentShowTime = !showTime;
+    }
+}
+
+// 제목 수정 모달
+function showEditTitleModal() {
+    if (!currentConversationId) { alert('먼저 대화를 시작해주세요.'); return; }
+    const modal = new bootstrap.Modal(document.getElementById('editTitleModal'));
+    const input = document.getElementById('newTitleInput');
+    const currentTitle = document.getElementById('conversationTitle').textContent;
+    input.value = currentTitle === '세카이 채팅' ? '' : currentTitle;
+    modal.show();
+    setTimeout(() => { input.focus(); input.select(); }, 300);
+}
+
+// 대화 제목 저장
+async function saveConversationTitle() {
+    const newTitle = document.getElementById('newTitleInput').value.trim();
+    if (!newTitle) { alert('제목을 입력해주세요.'); return; }
+    try {
+        const response = await fetch(`/api/conversations/${currentConversationId}/title`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: newTitle })
+        });
+        if (response.ok) {
+            document.getElementById('conversationTitle').textContent = newTitle;
+            bootstrap.Modal.getInstance(document.getElementById('editTitleModal')).hide();
+            if (window.loadConversations) await window.loadConversations();
+        } else alert('제목 수정 실패');
+    } catch {
+        alert('제목 수정 실패');
+    }
+}
+
+// 상황 프롬프트 모달
+function showSituationPromptModal() {
+    if (!currentConversationId) { alert('먼저 대화를 시작해주세요.'); return; }
+    const modal = new bootstrap.Modal(document.getElementById('situationPromptModal'));
+    const input = document.getElementById('situationPromptInput');
+    input.value = currentSituationPrompt;
+    modal.show();
+    setTimeout(() => input.focus(), 300);
+}
+
+// 상황 프롬프트 저장
+async function saveSituationPrompt() {
+    const prompt = document.getElementById('situationPromptInput').value.trim();
+    try {
+        const response = await fetch(`/api/conversations/${currentConversationId}/situation-prompt`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ situationPrompt: prompt })
+        });
+        if (response.ok) {
+            currentSituationPrompt = prompt;
+            bootstrap.Modal.getInstance(document.getElementById('situationPromptModal')).hide();
+            alert(prompt ? '상황 설정이 저장되었습니다.' : '상황 설정이 삭제되었습니다.');
+        } else alert('상황 설정 저장 실패');
+    } catch {
+        alert('상황 설정 저장 실패');
+    }
+}
+
+// 상황 프롬프트 삭제
+async function clearSituationPrompt() {
+    if (!confirm('상황 설정을 삭제하시겠습니까?')) return;
+    document.getElementById('situationPromptInput').value = '';
+    await saveSituationPrompt();
+}
+
+// 호감도 시스템 토글
+async function handleAffectionToggle(e) {
+    const useAffectionSys = e.target.checked;
+    if (!currentConversationId) {
+        e.target.checked = false;
+        alert('먼저 대화를 시작해주세요.');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/affection/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                conversationId: currentConversationId, 
+                useAffectionSys 
+            })
+        });
+        
+        if (response.ok) {
+            affectionSystemEnabled = useAffectionSys;
+            updateAffectionUI();
+            if (useAffectionSys) {
+                addMessage('system', '호감도 시스템이 활성화되었습니다. 대화 내용에 따라 캐릭터의 호감도가 변화합니다.');
+            } else {
+                addMessage('system', '호감도 시스템이 비활성화되었습니다.');
+            }
+        } else {
+            e.target.checked = !useAffectionSys;
+            alert('호감도 시스템 설정 변경에 실패했습니다.');
+        }
+    } catch (error) {
+        console.error('호감도 시스템 토글 실패:', error);
+        e.target.checked = !useAffectionSys;
+        alert('호감도 시스템 설정 변경에 실패했습니다.');
+    }
+}
+
+async function handleAutoReplyToggle(e) {
+    const isEnabled = e.target.checked;
+    autoReplyModeEnabled = isEnabled;
+    if (!currentConversationId) return;
+    try {
+        await fetch(`/api/conversations/${currentConversationId}/auto-reply-mode`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ autoReplyMode: isEnabled })
+        });
+    } catch {
+        e.target.checked = !isEnabled;
+        autoReplyModeEnabled = !isEnabled;
+    }
+}
+
+// 호감도 관리 모달 표시
+async function showAffectionModal() {
+    if (!currentConversationId) {
+        alert('먼저 대화를 시작해주세요.');
+        return;
+    }
+    
+    const modal = new bootstrap.Modal(document.getElementById('affectionModal'));
+    modal.show();
+    
+    // 호감도 상태 로드
+    await loadAffectionStatus();
+}
+
+// 호감도 상태 로드
+async function loadAffectionStatus() {
+    try {
+        const response = await fetch(`/api/conversations/${currentConversationId}/affection`);
+        if (response.ok) {
+            const data = await response.json();
+            updateAffectionModal(data);
+        } else {
+            console.error('호감도 상태 로드 실패');
+        }
+    } catch (error) {
+        console.error('호감도 상태 로드 중 오류:', error);
+    }
+}
+
+// 호감도 모달 업데이트 (수정됨)
+function updateAffectionModal(data) {
+    const statusDiv = document.getElementById('affectionSystemStatus');
+    const characterList = document.getElementById('affectionCharacterList');
+    
+    if (!data.use_affection_sys) {
+        statusDiv.innerHTML = `<div class="alert alert-info"><i class="bi bi-info-circle"></i> 호감도 시스템이 비활성화되어 있습니다.</div>`;
+        characterList.innerHTML = '';
+        return;
+    }
+    
+    statusDiv.innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle"></i> 호감도 시스템이 활성화되어 있습니다.</div>`;
+    
+    if (data.participants.length === 0) {
+        characterList.innerHTML = `<div class="text-center py-4 text-muted"><i class="bi bi-person-plus fs-2"></i><p class="mt-2">대화에 참여한 캐릭터가 없습니다.</p></div>`;
+        return;
+    }
+    
+    characterList.innerHTML = '';
+    data.participants.forEach(p => {
+        const level = p.affection_level ?? 0;
+        const type = p.affection_type || 'friendship';
+        const isNegative = level < 0;
+
+        const characterDiv = document.createElement('div');
+        characterDiv.className = 'character-affection-item';
+        characterDiv.innerHTML = `
+            <img src="${p.profile_image}" alt="${escapeHtml(p.name)}" class="character-affection-avatar" onerror="this.src='/images/characters/kanade.webp'">
+            <div class="character-affection-info">
+                <div class="character-affection-name">${escapeHtml(p.name)}</div>
+                <div class="character-affection-level">${getAffectionLevelText(level, type)}</div>
+                <div class="affection-type-group mt-2">
+                    <button class="btn btn-sm ${type === 'friendship' ? 'btn-primary' : 'btn-outline-primary'} ${isNegative ? 'disabled' : ''}" 
+                            onclick="updateAffectionType(this, 'friendship', ${p.character_id}, '${p.character_type}')">우정</button>
+                    <button class="btn btn-sm ${type === 'love' ? 'btn-danger' : 'btn-outline-danger'} ${isNegative ? 'disabled' : ''}" 
+                            onclick="updateAffectionType(this, 'love', ${p.character_id}, '${p.character_type}')">애정</button>
+                </div>
+            </div>
+            <div class="affection-controls">
+                <input type="range" class="affection-slider form-range" min="-100" max="100" step="1" value="${level}"
+                       data-character-id="${p.character_id}" data-character-type="${p.character_type}"
+                       oninput="updateAffectionLevel(this, true)" onchange="updateAffectionLevel(this, false)">
+                <div class="affection-value ${getAffectionClass(level)}">${level}</div>
+            </div>
+        `;
+        characterList.appendChild(characterDiv);
+    });
+}
+
+// 호감도 수준 텍스트 반환 (수정됨)
+function getAffectionLevelText(level, type) {
+    if (level < -50) return '적대적';
+    if (level < 0) return '부정적';
+    if (level < 50) return type === 'love' ? '어색함' : '친구';
+    return type === 'love' ? '사랑' : '친한 친구';
+}
+
+// 호감도 수준 CSS 클래스 반환 (수정됨)
+function getAffectionClass(level) {
+    if (level < 0) return 'affection-hostile';
+    if (level < 50) return 'affection-neutral';
+    return 'affection-loving';
+}
+
+// 호감도 수준 변경 (수정됨)
+async function updateAffectionLevel(slider, isInput) {
+    const characterId = parseInt(slider.dataset.characterId);
+    const characterType = slider.dataset.characterType;
+    const affectionLevel = parseInt(slider.value);
+    
+    const item = slider.closest('.character-affection-item');
+    const valueDisplay = item.querySelector('.affection-value');
+    const infoDiv = item.querySelector('.character-affection-level');
+    const typeButtons = item.querySelectorAll('.affection-type-group .btn');
+
+    valueDisplay.textContent = affectionLevel;
+    valueDisplay.className = `affection-value ${getAffectionClass(affectionLevel)}`;
+    infoDiv.textContent = getAffectionLevelText(affectionLevel, 'friendship'); // Type은 API 응답 후 갱신
+
+    if (affectionLevel < 0) {
+        typeButtons.forEach(btn => btn.classList.add('disabled'));
+    } else {
+        typeButtons.forEach(btn => btn.classList.remove('disabled'));
+    }
+
+    if (isInput) return; // oninput 이벤트는 UI만 업데이트
+
+    try {
+        const response = await fetch('/api/affection/adjust', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conversationId: currentConversationId, characterId, characterType, affectionLevel })
+        });
+        if (!response.ok) throw new Error('호감도 조절 실패');
+        
+        // 성공 후 상태 다시 로드
+        await loadAffectionStatus();
+    } catch (error) {
+        console.error('호감도 업데이트 실패:', error);
+        await loadAffectionStatus(); // 실패 시 원래 값으로 복원
+    }
+}
+
+// 호감도 타입 변경 (신규)
+async function updateAffectionType(button, type, characterId, characterType) {
+    if (button.classList.contains('disabled')) return;
+
+    try {
+        const response = await fetch('/api/affection/type', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conversationId: currentConversationId, characterId, characterType, affectionType: type })
+        });
+        if (!response.ok) throw new Error('타입 변경 실패');
+
+        // 성공 후 상태 다시 로드
+        await loadAffectionStatus();
+    } catch (error) {
+        console.error('호감도 타입 변경 실패:', error);
+        await loadAffectionStatus();
+    }
+}
+
+
+// 호감도 UI 업데이트
+function updateAffectionUI() {
+    const affectionBtn = document.getElementById('affectionBtn');
+    if (affectionBtn) {
+        if (affectionSystemEnabled) {
+            affectionBtn.style.opacity = '1';
+            affectionBtn.disabled = false;
+        } else {
+            affectionBtn.style.opacity = '0.5';
+            affectionBtn.disabled = true;
+        }
+    }
+}
+
+// 호감도 시스템 상태 로드 (대화 로드 시 호출)
+async function loadAffectionSystemState() {
+    if (!currentConversationId) return;
+    
+    try {
+        const response = await fetch(`/api/conversations/${currentConversationId}/affection`);
+        if (response.ok) {
+            const data = await response.json();
+            affectionSystemEnabled = !!data.use_affection_sys;
+            document.getElementById('affectionToggle').checked = affectionSystemEnabled;
+            updateAffectionUI();
+        }
+    } catch (error) {
+        console.error('호감도 시스템 상태 로드 실패:', error);
+        affectionSystemEnabled = false;
+        document.getElementById('affectionToggle').checked = false;
+        updateAffectionUI();
+    }
+}
+
+// 작업 모드 UI
+function updateWorkModeUI(isWorkMode) {
+    const chatContainer = document.querySelector('.chat-container');
+    if (isWorkMode) chatContainer.classList.add('work-mode-active');
+    else chatContainer.classList.remove('work-mode-active');
+}
+
+// 사용자 정보 로드
+async function loadUserInfo() {
+    try {
+        const response = await fetch('/api/user/info');
+        if (response.ok) {
+            userInfo = await response.json();
+            window.userInfo = userInfo;
+            updateModelSelector();
+            updateImageUploadButton();
+            if (!globalLoadingState.user) {
+                globalLoadingState.user = true;
+                globalLoadingState.checkAndHide();
+            }
+        } else if (response.status === 401) {
+            window.location.href = '/login';
+        }
+    } catch (e) {
+        console.error('사용자 정보 로드 실패:', e);
+        window.location.href = '/login';
+    }
+}
+
+// 캐릭터 목록 로드
+async function loadCharacters() {
+    try {
+        const response = await fetch('/api/characters/extended');
+        if (response.ok) {
+            availableCharacters = await response.json();
+            window.availableCharacters = availableCharacters;
+        } else {
+            const fallbackResponse = await fetch('/api/characters');
+            if (fallbackResponse.ok) {
+                availableCharacters = await fallbackResponse.json();
+                window.availableCharacters = availableCharacters;
+            }
+        }
+    } catch {
+        try {
+            const fallbackResponse = await fetch('/api/characters');
+            if (fallbackResponse.ok) {
+                availableCharacters = await fallbackResponse.json();
+                window.availableCharacters = availableCharacters;
+            }
+        } catch(e) {
+            console.error('캐릭터 로드 실패(최종):', e);
+        }
+    }
+}
+
+// 대화 로드
+async function loadConversation(id) {
+    currentConversationId = id;
+    awaitingResponse = false;
+    autoCallInProgress = false;
+    window.currentConversationId = currentConversationId;
+    try {
+        const response = await fetch(`/api/conversations/${id}`);
+        if (response.ok) {
+            const conversationData = await response.json();
+            let messages = [];
+            let workModeValue = 0;
+            let showTimeValue = 1;
+            let situationPrompt = '';
+            let autoReplyMode = 0;
+            if (conversationData.messages) {
+                messages = conversationData.messages;
+                workModeValue = conversationData.work_mode || 0;
+                showTimeValue = conversationData.show_time_info !== undefined ? conversationData.show_time_info : 1;
+                situationPrompt = conversationData.situation_prompt || '';
+                autoReplyMode = conversationData.auto_reply_mode_enabled || 0;
+            } else if (Array.isArray(conversationData)) {
+                messages = conversationData;
+            }
+            currentWorkMode = !!workModeValue;
+            currentShowTime = !!showTimeValue;
+            currentSituationPrompt = situationPrompt;
+            autoReplyModeEnabled = !!autoReplyMode;
+            document.getElementById('workModeToggle').checked = currentWorkMode;
+            document.getElementById('showTimeToggle').checked = currentShowTime;
+            document.getElementById('autoReplyToggle').checked = autoReplyModeEnabled;
+            updateWorkModeUI(currentWorkMode);
+            const messagesDiv = document.getElementById('chatMessages');
+            messagesDiv.innerHTML = '';
+            await loadConversationParticipants(id);
+            messages.forEach(msg => {
+                if (msg.message_type === 'image' && msg.filename) {
+                    const cleanContent = removeUnicodeEmojis(msg.content);
+                    addImageMessage(msg.role, cleanContent, `/api/images/${msg.filename}`, msg.id);
+                } else {
+                    const cleanContent = removeUnicodeEmojis(msg.content);
+                    addMessage(msg.role, cleanContent, msg.character_name, msg.character_image, msg.auto_call_sequence, msg.id);
+                }
+            });
+            let conversationTitle = '세카이 채팅';
+            if (window.allConversations) {
+                const currentConv = window.allConversations.find(conv => conv.id === id);
+                if (currentConv && currentConv.title) {
+                    conversationTitle = removeUnicodeEmojis(currentConv.title);
+                }
+            }
+            document.getElementById('conversationTitle').textContent = conversationTitle;
+            if (window.loadConversations) await window.loadConversations();
+            applyMarkdownMode();
+            // 호감도 시스템 상태 로드
+            await loadAffectionSystemState();
+            updateStartConversationPanel(); // [추가]
+        } else if (response.status === 401) {
+            window.location.href = '/login';
+        }
+    } catch (error) {
+        console.error('대화 로드 오류:', error);
+        alert('대화 로드 중 오류가 발생했습니다.');
+    }
+}
+
+// 대화 참여자 로드
+async function loadConversationParticipants(conversationId) {
+    try {
+        const response = await fetch(`/api/conversations/${conversationId}/participants`);
+        if (response.ok) {
+            currentCharacters = await response.json();
+            window.currentCharacters = currentCharacters;
+            updateInvitedCharactersUI();
+        }
+    } catch (error) {
+        console.error('참여자 로드 실패:', error);
+        currentCharacters = [];
+        window.currentCharacters = [];
+    }
+}
+
+// 메시지 전송
+async function sendMessage(role = 'user') {
+    if (awaitingUserMessageResponse) return;
+
+    if (generationAbortController) {
+        generationAbortController.abort();
+        generationAbortController = null;
+    }
+    const input = document.getElementById('messageInput');
+    const message = input.value.trim();
+    if (!message) return;
+
+    if (!currentConversationId) {
+        await startNewConversation();
+        if (!currentConversationId) { 
+            alert('대화 생성 실패'); 
+            return; 
+        }
+    }
+
+    const cleanMessage = removeUnicodeEmojis(message);
+    const tempMessageBubble = addMessage(role, cleanMessage);
+    input.value = '';
+    input.style.height = 'auto';
+
+    awaitingUserMessageResponse = true;
+    try {
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message, conversationId: currentConversationId, role })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.message) {
+                if (tempMessageBubble) {
+                    const temp = tempMessageBubble.closest('.message');
+                    if (temp) temp.remove();
+                }
+                addMessage(role, data.message.content, null, null, 0, data.message.id);
+                if (data.suggestedKnowledge && data.suggestedKnowledge.length > 0 && window.showKnowledgeSuggestion) {
+                    window.showKnowledgeSuggestion(data.suggestedKnowledge);
+                }
+                await triggerAutoReply();
+            }
+            awaitingResponse = true; // This seems to be for stream, keeping it.
+            if (window.loadConversations) await window.loadConversations();
+            if (currentCharacters.length === 0) {
+                addMessage('system', '캐릭터를 초대한 후 캐릭터 프로필을 클릭하여 응답을 생성하세요.');
+            }
+        } else if (response.status === 401) {
+            window.location.href = '/login';
+        } else {
+            alert('메시지 전송 실패');
+        }
+    } catch (error) {
+        console.error('메시지 전송 오류:', error);
+        alert('메시지 전송 중 오류가 발생했습니다.');
+    } finally {
+        awaitingUserMessageResponse = false;
+    }
+}
+
+// 캐릭터 응답 생성
+async function generateCharacterResponse(characterId) {
+    if (autoCallInProgress) return;
+
+    if (generationAbortController) {
+        generationAbortController.abort();
+    }
+    generationAbortController = new AbortController();
+    const signal = generationAbortController.signal;
+
+    const character = currentCharacters.find(c => c.id === characterId) ||
+        availableCharacters.find(c => c.id === characterId);
+    let loadingMessage = '...';
+    if (imageGenerationEnabled && supportsImageGeneration(characterId, character?.type || 'official')) {
+        loadingMessage = '... 🎨';
+    }
+    const loadingBubble = addMessage('assistant', loadingMessage, character?.name, character?.profile_image);
+    try {
+        const requestBody = {
+            characterId,
+            conversationId: currentConversationId,
+            workMode: currentWorkMode,
+            showTime: currentShowTime,
+            situationPrompt: currentSituationPrompt,
+            imageGenerationEnabled
+        };
+        if (imageGenerationEnabled) {
+            requestBody.imageCooldownSeconds = getRemainingImageCooldown();
+        }
+        const imageToggle = document.getElementById('imageToggle');
+        if (imageToggle.checked && lastUploadedImageData) {
+            requestBody.imageData = lastUploadedImageData;
+        }
+        const response = await fetch('/api/chat/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody),
+            signal
+        });
+        if (response.ok) {
+            const data = await response.json();
+            if (loadingBubble) {
+                const el = loadingBubble.closest('.message');
+                if (el) el.remove();
+            }
+            if (data.newMessage) {
+                addMessage('assistant', data.newMessage.content, character?.name, character?.profile_image, data.newMessage.auto_call_sequence, data.newMessage.id);
+            }
+            if (data.generatedImages && data.generatedImages.length > 0) {
+                setImageGenerationCooldown();
+                addMessage('system', `🎨 ${data.generatedImages.length}개의 이미지가 생성되었습니다!`);
+                for (const image of data.generatedImages) {
+                    addImageMessage('assistant', `🖼️ "${image.prompt}"`, image.url);
+                    await updateCharacterProfileImage(characterId, image.url);
+                }
+            }
+            awaitingResponse = false;
+            if (window.loadConversations) await window.loadConversations();
+        } else if (response.status === 401) {
+            window.location.href = '/login';
+        } else {
+            if (loadingBubble) {
+                const el = loadingBubble.closest('.message');
+                if (el) el.remove();
+            }
+            showErrorModal(GEMINI_ERROR_GUIDANCE);
+        }
+    } catch (err) {
+        if (err.name === 'AbortError') {
+            console.log('Character response generation aborted.');
+            if (loadingBubble) {
+                const el = loadingBubble.closest('.message');
+                if (el) el.remove();
+            }
+            return; 
+        }
+        console.error('캐릭터 응답 생성 오류:', err);
+        if (loadingBubble) {
+            const el = loadingBubble.closest('.message');
+            if (el) el.remove();
+        }
+        showErrorModal(GEMINI_ERROR_GUIDANCE);
+    } finally {
+        generationAbortController = null;
+    }
+}
+
+async function triggerAutoReply() {
+    if (!autoReplyModeEnabled || autoCallInProgress) return;
+
+    console.log('[Auto-Reply] Starting...');
+    if (generationAbortController) {
+        generationAbortController.abort();
+    }
+    generationAbortController = new AbortController();
+    const signal = generationAbortController.signal;
+
+    autoCallInProgress = true;
+
+    try {
+        const maxSequence = userInfo?.max_auto_call_sequence || 1;
+        let autoCallCount = 0;
+
+        while (autoCallCount < maxSequence) {
+            if (signal.aborted) {
+                console.log('[Auto-Reply] Aborted.');
+                break;
+            }
+            console.log(`[Auto-Reply] Loop ${autoCallCount + 1}/${maxSequence}`);
+
+            // 1. Select next speaker
+            console.log('[Auto-Reply] Selecting speaker...');
+            const selectResponse = await fetch('/api/chat/auto-reply/select-speaker', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conversationId: currentConversationId }),
+                signal
+            });
+
+            if (!selectResponse.ok) {
+                console.error('[Auto-Reply] Speaker selection failed.', selectResponse.status);
+                break;
+            }
+
+            const selectData = await selectResponse.json();
+            console.log('[Auto-Reply] Speaker selection data:', selectData);
+            const speaker = selectData.speaker;
+
+            if (!speaker) {
+                console.log('[Auto-Reply] No speaker selected. Ending sequence.');
+                break;
+            }
+            console.log(`[Auto-Reply] Speaker selected: ${speaker.name}`);
+
+            // 2. Show loading bubble
+            const loadingBubble = addMessage('assistant', '...', speaker.name, speaker.profile_image);
+            
+            // 3. Generate the actual message
+            console.log(`[Auto-Reply] Generating message for ${speaker.name}...`);
+            const generationPayload = {
+                characterId: speaker.id,
+                conversationId: currentConversationId,
+                workMode: currentWorkMode,
+                showTime: currentShowTime,
+                situationPrompt: currentSituationPrompt,
+                imageGenerationEnabled: imageGenerationEnabled,
+                autoCallCount: autoCallCount + 1
+            };
+            console.log('[Auto-Reply] Generation payload:', generationPayload);
+
+            const generationResponse = await fetch('/api/chat/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(generationPayload),
+                signal
+            });
+
+            // 4. Remove loading bubble
+            if (loadingBubble) {
+                const el = loadingBubble.closest('.message');
+                if (el) el.remove();
+            }
+
+            if (!generationResponse.ok) {
+                console.error('[Auto-Reply] Message generation failed.', generationResponse.status);
+                addMessage('system', GEMINI_ERROR_GUIDANCE);
+                break;
+            }
+
+            const generationData = await generationResponse.json();
+            console.log('[Auto-Reply] Generation response data:', generationData);
+
+            // 5. Add the new message
+            if (generationData.newMessage) {
+                console.log('[Auto-Reply] Adding new message to chat.');
+                addMessage('assistant', generationData.newMessage.content, speaker.name, speaker.profile_image, generationData.newMessage.auto_call_sequence, generationData.newMessage.id);
+            } else {
+                console.warn('[Auto-Reply] No newMessage found in generation response.');
+            }
+            
+            if (generationData.generatedImages && generationData.generatedImages.length > 0) {
+                setImageGenerationCooldown();
+                addMessage('system', `🎨 ${generationData.generatedImages.length}개의 이미지가 생성되었습니다!`);
+                for (const image of generationData.generatedImages) {
+                    addImageMessage('assistant', `🖼️ "${image.prompt}"`, image.url);
+                    await updateCharacterProfileImage(speaker.id, image.url);
+                }
+            }
+
+            autoCallCount++;
+            
+            // Small delay between auto-replies
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+    } catch (error) {
+        if (error.name !== 'AbortError') {
+            console.error('Auto-reply failed catastrophically:', error);
+            addMessage('system', '자동 답변 중 오류가 발생했습니다.');
+        }
+    } finally {
+        console.log('[Auto-Reply] Ending.');
+        autoCallInProgress = false;
+        generationAbortController = null;
+    }
+}
+
+// 자동 호출 처리
+
+
+// 캐릭터 초대 모달
+function showInviteModal() {
+    if (!currentConversationId) { alert('먼저 대화를 시작해주세요.'); return; }
+    const modal = new bootstrap.Modal(document.getElementById('inviteModal'));
+    const container = document.getElementById('availableCharacters');
+    container.innerHTML = '';
+    const invitedKeys = new Set(currentCharacters.map(c => {
+        const type = (c.character_type === 'official') ? 'official' : 'user';
+        return `${type}-${c.id}`;
+    }));
+    const available = availableCharacters.filter(character => {
+        const type = (character.category === 'official') ? 'official' : 'user';
+        const key = `${type}-${character.id}`;
+        return !invitedKeys.has(key);
+    });
+    if (available.length === 0) {
+        container.innerHTML = '<p class="text-center">초대할 수 있는 캐릭터가 없습니다.</p>';
+    } else {
+        available.forEach(character => {
+            const card = document.createElement('div');
+            card.className = 'character-card';
+            let categoryBadge = '';
+            if (character.category === 'my_character') {
+                categoryBadge = '<span class="badge bg-success">내 캐릭터</span>';
+            }
+            const characterTypeForAPI = (character.category === 'official') ? 'official' : 'user';
+            card.innerHTML = `
+                <img src="${character.profile_image}" alt="${escapeHtml(character.name)}" class="character-card-avatar" onerror="this.src='/images/characters/kanade.webp'">
+                <div class="character-card-info">
+                    <h6>${escapeHtml(character.name)} ${categoryBadge}</h6>
+                    ${character.nickname ? `<p>${escapeHtml(character.nickname)}</p>` : ''}
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="inviteCharacter(${character.id}, '${characterTypeForAPI}')">초대</button>
+            `;
+            container.appendChild(card);
+        });
+    }
+    modal.show();
+}
+
+// 캐릭터 초대
+async function inviteCharacter(characterId, characterType) {
+    try {
+        const response = await fetch(`/api/conversations/${currentConversationId}/invite`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ characterId, characterType })
+        });
+        if (response.ok) {
+            await loadConversationParticipants(currentConversationId);
+            bootstrap.Modal.getInstance(document.getElementById('inviteModal')).hide();
+        } else {
+            alert('캐릭터 초대 실패');
+        }
+    } catch {
+        alert('캐릭터 초대 실패');
+    }
+}
+
+// 초대된 캐릭터 UI
+function updateInvitedCharactersUI() {
+    const container = document.getElementById('invitedCharacters');
+    container.innerHTML = '';
+    if (currentCharacters.length === 0) {
+        container.innerHTML = '<p class="no-characters-text">초대된 캐릭터가 없습니다. 캐릭터를 초대해보세요!</p>';
+        return;
+    }
+    currentCharacters.forEach(character => {
+        const avatarContainer = document.createElement('div');
+        avatarContainer.className = 'character-avatar-container';
+        avatarContainer.title = `${character.name} - 클릭하여 응답 생성`;
+        avatarContainer.onclick = () => generateCharacterResponse(character.id);
+        const avatar = document.createElement('img');
+        avatar.src = character.profile_image;
+        avatar.alt = character.name;
+        avatar.className = 'invited-character-avatar clickable';
+        avatar.onerror = function() { this.src = '/images/characters/kanade.webp'; };
+        avatarContainer.appendChild(avatar);
+        container.appendChild(avatarContainer);
+    });
+    updateImageGenerationUI();
+}
+
+// 새 대화 시작
+async function startNewConversation() {
+    try {
+        const response = await fetch('/api/conversations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        if (response.ok) {
+            const data = await response.json();
+            currentConversationId = data.id;
+            window.currentConversationId = currentConversationId;
+            currentCharacters = [];
+            window.currentCharacters = [];
+            lastUploadedImageData = null;
+            awaitingResponse = false;
+            autoCallInProgress = false;
+            currentWorkMode = false;
+            currentShowTime = true;
+            currentSituationPrompt = '';
+            affectionSystemEnabled = false;
+            document.getElementById('workModeToggle').checked = false;
+            document.getElementById('showTimeToggle').checked = true;
+            document.getElementById('affectionToggle').checked = false;
+            updateWorkModeUI(false);
+            updateAffectionUI();
+            document.getElementById('chatMessages').innerHTML = '';
+            document.getElementById('conversationTitle').textContent = '세카이 채팅';
+            updateInvitedCharactersUI();
+            if (window.loadConversations) await window.loadConversations();
+            applyMarkdownMode();
+            updateStartConversationPanel(); // [추가]
+            setTimeout(() => {
+                showSituationPromptModal();
+            }, 350); // [추가]
+        } else if (response.status === 401) {
+            window.location.href = '/login';
+        } else {
+            alert('대화 생성 실패');
+        }
+    } catch {
+        alert('대화 생성 실패');
+    }
+}
+
+// 이미지 업로드 처리
+async function handleImageUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (!userInfo.has_api_key) {
+        alert('이미지 업로드는 개인 Gemini API 키가 등록된 사용자만 이용할 수 있습니다.');
+        return;
+    }
+    if (!validateImageFile(file)) {
+        alert('지원하지 않는 형식이거나 5MB 초과입니다.');
+        return;
+    }
+    if (!currentConversationId) {
+        await startNewConversation();
+        if (!currentConversationId) { alert('대화방 생성 실패'); return; }
+    }
+    const uploadModal = new bootstrap.Modal(document.getElementById('uploadModal'));
+    try {
+        uploadModal.show();
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('conversationId', currentConversationId);
+        const uploadResponse = await fetch('/api/upload/direct', { method: 'POST', body: formData });
+        if (!uploadResponse.ok) throw new Error('업로드 실패');
+        const { imageUrl, fileName } = await uploadResponse.json();
+        const base64Data = await fileToBase64(file);
+        lastUploadedImageData = {
+            base64Data,
+            mimeType: file.type,
+            fileName: file.name
+        };
+        const cleanFileName = removeUnicodeEmojis(file.name);
+        addImageMessage('user', cleanFileName, imageUrl);
+        if (window.loadConversations) await window.loadConversations();
+        addMessage('system', '이미지가 업로드되었습니다. 메시지를 입력하면 캐릭터가 이미지를 참고합니다.');
+    } catch (e) {
+        console.error(e);
+        alert('업로드 실패');
+    } finally {
+        uploadModal.hide();
+        event.target.value = '';
+    }
+}
+
+// 이미지 메시지 추가
+function addImageMessage(role, fileName, imageUrl, messageId = null) {
+    const messagesDiv = document.getElementById('chatMessages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${role}`;
+    const cleanFileName = removeUnicodeEmojis(fileName);
+    const escapedFileName = escapeHtml(cleanFileName);
+    const deleteButtonHtml = messageId ?
+        `<div class="message-delete-wrapper">
+            <button class="message-delete-btn" onclick="deleteMessage(${messageId}, this.closest('.message'))" title="메시지 삭제">
+                <i class="bi bi-trash-fill"></i>
+            </button>
+         </div>` : '';
+    if (role === 'user') {
+        messageDiv.innerHTML = `
+            <div class="message-content">
+                <div class="image-message">
+                    <img src="${imageUrl}" alt="${escapedFileName}" class="uploaded-image">
+                    <div class="image-info">${escapedFileName}</div>
+                </div>
+                ${deleteButtonHtml}
+            </div>`;
+    } else {
+        messageDiv.innerHTML = `
+            <img src="/images/characters/kanade.webp" alt="카나데" class="message-avatar">
+            <div class="message-content">
+                <div class="image-message">
+                    <img src="${imageUrl}" alt="${escapedFileName}" class="uploaded-image">
+                    <div class="image-info">${escapedFileName}</div>
+                </div>
+                ${deleteButtonHtml}
+            </div>`;
+    }
+    messagesDiv.appendChild(messageDiv);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+// 메시지 삭제
+async function deleteMessage(messageId, messageElement) {
+    if (!confirm('이 메시지를 삭제하시겠습니까?')) return;
+    try {
+        const response = await fetch(`/api/messages/${messageId}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' } });
+        if (response.ok) {
+            messageElement.remove();
+            if (window.loadConversations) await window.loadConversations();
+        } else if (response.status === 401) {
+            window.location.href = '/login';
+        } else alert('메시지 삭제 실패');
+    } catch {
+        alert('메시지 삭제 실패');
+    }
+}
+
+// 커스텀 이모지 HTML
+function createCustomEmojiHTML(emojiFileName) {
+    const emojiId = `emoji_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `<div class="custom-emoji" id="container_${emojiId}">
+        <img src="/images/emojis/${emojiFileName}" 
+             alt="emoji" 
+             class="emoji-image" 
+             id="${emojiId}"
+             onerror="handleEmojiLoadError('${emojiId}')">
+    </div>`;
+}
+
+function handleEmojiLoadError(emojiId) {
+    const emojiImg = document.getElementById(emojiId);
+    const emojiContainer = document.getElementById(`container_${emojiId}`);
+    if (emojiImg) emojiImg.classList.add('failed-to-load');
+    if (emojiContainer) emojiContainer.classList.add('hidden');
+}
+
+// 커스텀 이모지 파싱
+function parseCustomEmoji(content) {
+    const emojiRegex = /::([\가-힣\w\s\-_\(\)!]+\.(jpg|jpeg|png|gif|webp))::/i;
+    const match = content.match(emojiRegex);
+    if (match) {
+        const emojiFileName = match[1];
+        const text = content.replace(emojiRegex, '').trim();
+        return { text, emoji: emojiFileName };
+    }
+    return { text: content, emoji: null };
+}
+
+// 메시지 추가
+function addMessage(role, content, characterName = null, characterImage = null, autoCallSequence = 0, messageId = null) {
+    // 대체 동작: 서버/서드파티에서 보내는 "더미" 보조 메시지 (예: "으....이...." 같은) 가
+    // 저장되지 않은 보조 응답으로 화면에 남는 것을 방지하기 위해 해당 경우 시스템 안내 메시지로 대체합니다.
+    if (role === 'assistant' && (!messageId) && typeof content === 'string') {
+        const rawTrim = content.trim();
+        // 정확히 "으....이...." 문자열을 대체 (필요 시 패턴을 확장 가능)
+        if (rawTrim === '으....이....') {
+            role = 'system';
+            content = GEMINI_ERROR_GUIDANCE;
+        }
+    }
+
+    const messagesDiv = document.getElementById('chatMessages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${role}`;
+    if (autoCallSequence > 0) {
+        messageDiv.classList.add('auto-called-message');
+        messageDiv.setAttribute('data-auto-sequence', autoCallSequence);
+    }
+    const cleanedContent = removeUnicodeEmojis(content);
+    const { text, emoji } = parseCustomEmoji(cleanedContent);
+    const rawForMarkdown = text;
+    const plainProcessed = stripMarkdown(rawForMarkdown);
+    const escapedPlain = escapeHtml(plainProcessed);
+    const processedText = processLongText(escapedPlain);
+    const deleteButtonHtml = role !== 'system' && messageId ?
+        `<div class="message-delete-wrapper">
+            <button class="message-delete-btn" onclick="deleteMessage(${messageId}, this.closest('.message'))" title="메시지 삭제">
+                <i class="bi bi-trash-fill"></i>
+            </button>
+        </div>` : '';
+
+    if (role === 'assistant') {
+        let avatarSrc = '/images/characters/kanade.webp';
+        let altText = '카나데';
+        if (characterImage) avatarSrc = characterImage;
+        if (characterName) altText = characterName;
+
+        // 변경: 로딩 표시 판별을 더 포괄적으로 처리하여
+        // '...', '... 🎨' 등으로 시작하는 모든 경우에 항상 placeholder-glow UI를 사용합니다.
+        const isLoadingPlaceholder = typeof rawForMarkdown === 'string' && rawForMarkdown.trim().startsWith('...');
+
+        if (isLoadingPlaceholder) {
+            // 항상 플레이스홀더 형태의 로딩 UI를 사용
+            messageDiv.innerHTML = `
+                <img src="${avatarSrc}" alt="${escapeHtml(altText)}" class="message-avatar" onerror="this.src='/images/characters/kanade.webp'">
+                <div class="message-content">
+                    <div class="message-bubble placeholder-glow" data-raw="${escapeHtml(rawForMarkdown).replace(/"/g,'&quot;')}" aria-live="polite" aria-label="답변 생성 중">
+                        <span class="placeholder col-9 mb-2" style="display:block; height:14px; border-radius:6px;"></span>
+                        <span class="placeholder col-7 mb-2" style="display:block; height:14px; border-radius:6px;"></span>
+                        <span class="placeholder col-8" style="display:block; height:14px; border-radius:6px;"></span>
+                    </div>
+                </div>`;
+        } else {
+            messageDiv.innerHTML = `
+                <img src="${avatarSrc}" alt="${escapeHtml(altText)}" class="message-avatar" onerror="this.src='/images/characters/kanade.webp'">
+                <div class="message-content">
+                    <div class="message-bubble" data-raw="${escapeHtml(rawForMarkdown).replace(/"/g,'&quot;')}">
+                        ${showMarkdown ? markdownToHtml(rawForMarkdown) : processedText}
+                    </div>
+                    ${emoji ? createCustomEmojiHTML(emoji) : ''}
+                    ${deleteButtonHtml}
+                </div>`;
+        }
+    } else if (role === 'system') {
+        messageDiv.innerHTML = `
+            <div class="message-content">
+                <div class="message-bubble system-message" data-raw="${escapeHtml(rawForMarkdown).replace(/"/g,'&quot;')}">${processedText}</div>
+            </div>`;
+    } else if (role === 'situation') {
+        messageDiv.innerHTML = `
+            <div class="message-content">
+                <div class="message-bubble situation-message" data-raw="${escapeHtml(rawForMarkdown).replace(/"/g,'&quot;')}"><i class="bi bi-card-text"></i> ${processedText}</div>
+            </div>`;
+    } else {
+        messageDiv.innerHTML = `
+            <div class="message-content">
+                <div class="message-bubble" data-raw="${escapeHtml(rawForMarkdown).replace(/"/g,'&quot;')}">
+                    ${showMarkdown ? markdownToHtml(rawForMarkdown) : processedText}
+                </div>
+                ${emoji ? createCustomEmojiHTML(emoji) : ''}
+                ${deleteButtonHtml}
+            </div>`;
+    }
+    messagesDiv.appendChild(messageDiv);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    return messageDiv.querySelector('.message-bubble');
+}
+
+// 생성된 이미지를 캐릭터 프로필 이미지로 자동 적용
+async function updateCharacterProfileImage(characterId, imageUrl) {
+    try {
+        const urlMatch = imageUrl.match(/\/api\/images\/generated\/(.+)$/);
+        if (!urlMatch) return false;
+        const imageKey = `generated_images/${urlMatch[1]}`;
+        const character = currentCharacters.find(c => c.id === characterId) ||
+            availableCharacters.find(c => c.id === characterId);
+        if (!character) return false;
+        if (character.character_type !== 'user') return false;
+        const updateResponse = await fetch(`/api/user/characters/${characterId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: character.name,
+                description: character.description,
+                systemPrompt: character.system_prompt,
+                profileImageR2: imageKey
+            })
+        });
+        if (!updateResponse.ok) return false;
+        character.profile_image_r2 = imageKey;
+        character.profile_image = `/api/user-characters/image/${imageKey}`;
+        updateInvitedCharactersUI();
+        if (typeof updateHeaderCharacterAvatars === 'function') {
+            try { updateHeaderCharacterAvatars(); } catch(e){}
+        }
+        addMessage('system', `✨ ${character.name}의 프로필 이미지가 업데이트되었습니다!`);
+        return true;
+    } catch (error) {
+        console.error('프로필 이미지 업데이트 오류:', error);
+        return false;
+    }
+}
+
+// 유틸
+function validateImageFile(file) {
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    const maxSize = 5 * 1024 * 1024;
+    if (!allowedTypes.includes(file.type)) return false;
+    if (file.size > maxSize || file.size <= 0) return false;
+    return true;
+}
+
+function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const base64 = reader.result.split(',')[1];
+            resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+function updateModelSelector() {
+    const modelSelect = document.getElementById('modelSelect');
+    if (!modelSelect) return;
+    const proOption = modelSelect.querySelector('option[value="gemini-2.5-pro"]');
+    if (proOption) {
+        proOption.disabled = !userInfo.has_api_key;
+        if (!userInfo.has_api_key && modelSelect.value === 'gemini-2.5-pro') {
+            modelSelect.value = 'gemini-2.0-flash';
+        }
+    }
+}
+
+function updateImageUploadButton() {
+    const uploadBtn = document.getElementById('imageUploadBtn');
+    if (!uploadBtn) return;
+    if (userInfo.has_api_key) {
+        uploadBtn.style.opacity = '1';
+        uploadBtn.style.cursor = 'pointer';
+        uploadBtn.title = '이미지 업로드';
+    } else {
+        uploadBtn.style.opacity = '0.5';
+        uploadBtn.style.cursor = 'not-allowed';
+        uploadBtn.title = '개인 API 키가 필요합니다';
+    }
+}
+
+// 에러 모달 표시 함수
+function showErrorModal(message) {
+    const errorModalEl = document.getElementById('errorModal');
+    if (!errorModalEl) return;
+    const errorModal = new bootstrap.Modal(errorModalEl);
+    const errorModalBody = document.getElementById('errorModalBody');
+    if (errorModalBody) {
+        errorModalBody.innerHTML = message;
+    }
+    errorModal.show();
+}
+
+// 전역 노출
+window.loadConversation = loadConversation;
+window.startNewConversation = startNewConversation;
+window.handleEmojiLoadError = handleEmojiLoadError;
+window.deleteMessage = deleteMessage;
+window.updateInvitedCharactersUI = updateInvitedCharactersUI;
+window.inviteCharacter = inviteCharacter;
+window.updateAffectionLevel = updateAffectionLevel;
+window.updateAffectionType = updateAffectionType; // 전역 노출 추가

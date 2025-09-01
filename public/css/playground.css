@@ -1,0 +1,1180 @@
+/* =================================
+   CHAT PAGE STYLES
+   ================================= */
+
+/* 채팅 컨테이너 */
+.chat-container {
+  height: 100vh;
+  display: flex;
+}
+
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 25px;
+  background: var(--bg-color);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 메시지 스타일 */
+.message {
+  margin-bottom: 20px;
+  display: flex;
+  gap: 12px;
+  animation: messageSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  max-width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message.user {
+  flex-direction: row-reverse;
+}
+
+.message-content {
+  display: flex;
+  flex-direction: column;
+  max-width: 70%;
+  min-width: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+}
+
+.message-bubble {
+  max-width: 100%;
+  padding: 16px 20px;
+  border-radius: 20px;
+  position: relative;
+  word-wrap: break-word;
+  background: var(--surface-gradient);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 15px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+  word-break: break-word !important;
+  white-space: pre-wrap !important;
+  hyphens: auto;
+  line-height: 1.4;
+}
+
+.message-bubble:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+}
+
+.message.user .message-bubble {
+  background: var(--accent-gradient);
+  color: white;
+  border-radius: 20px 20px 6px 20px;
+  box-shadow: 0 4px 20px var(--shadow-color);
+}
+
+.message.assistant .message-bubble {
+  background: var(--surface-gradient);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  border-radius: 20px 20px 20px 6px;
+}
+
+.message.system .message-bubble, .message.situation .message-bubble {
+  background: var(--system-message-bg) !important;
+  color: var(--text-secondary) !important;
+  border: 1px dashed var(--border-color) !important;
+  font-style: italic;
+  font-size: 14px;
+  text-align: center;
+  border-radius: 16px !important;
+}
+
+.message.situation .message-bubble {
+    background: var(--situation-message-bg) !important;
+}
+
+.message.system, .message.situation {
+  justify-content: center;
+}
+
+.message.system .message-content {
+  max-width: 80%;
+}
+
+/* =========================
+   타이핑 인디케이터
+   ========================= */
+.typing-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  position: relative;
+  min-width: 56px;
+  justify-content: center;
+}
+
+.typing-indicator::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: radial-gradient(circle at 30% 30%, rgba(135,206,235,0.25), transparent 70%);
+  opacity: 0;
+  animation: typingHalo 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes typingHalo {
+  0%, 100% { opacity: 0; transform: scale(0.6); }
+  40% { opacity: 0.55; transform: scale(1); }
+  60% { opacity: 0.2; transform: scale(1.15); }
+}
+
+.typing-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--button-color) 0%, var(--button-hover-color) 100%);
+  opacity: 0.4;
+  animation: typingDotWave 1.1s ease-in-out infinite;
+  box-shadow: 0 0 0 0 rgba(135,206,235,0.5);
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: .18s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: .36s;
+}
+
+@keyframes typingDotWave {
+  0%, 70%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.35;
+    box-shadow: 0 0 0 0 rgba(135,206,235,0.0);
+  }
+  35% {
+    transform: translateY(-7px) scale(1.25);
+    opacity: 1;
+    box-shadow: 0 4px 12px -2px rgba(135,206,235,0.55);
+  }
+}
+
+.message-bubble.typing-active {
+  animation: typingBubblePulse 1.6s ease-in-out infinite;
+  position: relative;
+  overflow: hidden;
+}
+
+@keyframes typingBubblePulse {
+  0%,100% {
+    transform: scale(1);
+    box-shadow: 0 2px 15px rgba(135,206,235,0.15);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 4px 22px rgba(135,206,235,0.30);
+  }
+}
+
+/* ================
+   Bootstrap placeholder-glow 적용 (AI 응답 생성 중 말풍선)
+   설명: chat.js에서 assistant의 임시 텍스트로 '...' 를 사용하여
+   placeholder-glow 구조로 렌더링합니다.
+   Bootstrap 예시:
+   <p class="placeholder-glow">
+     <span class="placeholder col-12"></span>
+   </p>
+   ================ */
+.message-bubble.placeholder-glow {
+  /* 유지되는 기존 버블 스타일과 조화되도록 약간 조정 */
+  background: var(--surface-gradient);
+  color: transparent !important; /* 내부 텍스트가 보이지 않도록 함 */
+  min-height: 56px;
+  padding: 14px 18px;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  border: 1px solid var(--border-color);
+}
+
+/* placeholder 요소 기본 스타일 보강 (부트스트랩 클래스와 함께 동작) */
+.message-bubble.placeholder-glow .placeholder {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  background-color: rgba(0,0,0,0.06); /* 라이트 모드 기본 */
+  opacity: 0.95;
+}
+
+/* 마지막 placeholder는 margin 제거 */
+.message-bubble.placeholder-glow .placeholder:last-child {
+  margin-bottom: 0;
+}
+
+/* 컬럼 클래스(col-*)가 적용되어 폭을 제어하므로 display:block 만 보장 */
+.message-bubble.placeholder-glow .placeholder.col-12 { width:100%; }
+.message-bubble.placeholder-glow .placeholder.col-9 { width:75%; }
+.message-bubble.placeholder-glow .placeholder.col-8 { width:66.6667%; }
+.message-bubble.placeholder-glow .placeholder.col-7 { width:58.3333%; }
+
+@media (prefers-color-scheme: dark) {
+  .message-bubble.placeholder-glow .placeholder {
+    background-color: rgba(255,255,255,0.06); /* 다크 모드에서 밝은 플레이트홀더 */
+  }
+}
+
+/* 메시지 아바타 */
+.message-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 2px solid var(--border-color);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+.message-avatar:hover {
+  transform: scale(1.1);
+  border-color: var(--button-color-solid);
+  box-shadow: 0 4px 20px var(--shadow-color);
+}
+
+.message.assistant {
+  align-items: flex-start;
+}
+
+.message.user .message-avatar {
+  display: none;
+}
+
+/* 커스텀 이모지 */
+.custom-emoji {
+  margin-top: 8px;
+  text-align: center;
+}
+
+.emoji-image {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px var(--shadow-color);
+  background: var(--message-bg);
+}
+
+.emoji-image.failed-to-load {
+  display: none !important;
+}
+
+.custom-emoji:has(.emoji-image.failed-to-load) {
+  display: none !important;
+}
+
+.custom-emoji.hidden {
+  display: none !important;
+}
+
+.chat-container.hide-emojis .custom-emoji {
+    display: none;
+}
+
+/* 채팅 헤더 (상단 확장형) */
+.chat-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 20px 25px;
+  background: var(--surface-gradient);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  transition: padding .4s cubic-bezier(0.4, 0, 0.2, 1), background .4s ease;
+  backdrop-filter: blur(20px);
+  position: relative;
+}
+
+.chat-header.expanded {
+  padding-bottom: 26px;
+}
+
+.chat-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: var(--accent-gradient);
+  opacity: 0.3;
+}
+
+.profile-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile-image {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid transparent;
+  background: var(--accent-gradient);
+  padding: 2px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.profile-image:hover {
+  transform: scale(1.05) rotate(3deg);
+  box-shadow: 0 6px 25px var(--shadow-color);
+}
+
+.profile-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-name {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-color);
+  letter-spacing: -0.02em;
+}
+
+.profile-status {
+  margin: 0;
+  font-size: 13px;
+  color: #10ac84;
+  font-weight: 600;
+  background: rgba(16, 172, 132, 0.1);
+  padding: 2px 8px;
+  border-radius: 12px;
+  margin-top: 4px;
+}
+
+/* =========================
+   헤더 컨트롤 (상단바 확장)
+   ========================= */
+.header-controls-toggle {
+  background: none;
+  border: none;
+  color: var(--text-color);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  position: relative;
+  align-self: flex-start;
+}
+
+.header-controls-toggle:hover {
+  background-color: var(--button-color);
+  opacity: 0.8;
+}
+
+/* 채팅 입력 영역 */
+.chat-input {
+  padding: 25px;
+  border-top: 1px solid var(--border-color);
+  background: var(--surface-gradient);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.05);
+}
+
+.character-management {
+  margin-bottom: 18px;
+  padding: 16px;
+  background: var(--surface-gradient);
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+}
+
+.character-management:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.invited-characters {
+  display: flex;
+  gap: 5px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.invited-character-avatar {
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--button-color-solid);
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+
+.invited-character-avatar:hover {
+  transform: scale(1.2);
+}
+
+.input-group {
+  display: flex;
+  gap: 10px;
+}
+
+.chat-input-field {
+  flex: 1;
+  border: 2px solid var(--border-color);
+  border-radius: 28px;
+  padding: 16px 24px;
+  font-size: 16px;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  resize: none;
+  min-height: 56px;
+  max-height: 150px;
+  overflow-y: auto;
+  line-height: 1.5;
+  background: var(--card-bg);
+  color: var(--text-color);
+  box-shadow: 0 2px 15px rgba(0, 0, 0, 0.05);
+  backdrop-filter: blur(10px);
+}
+
+.chat-input-field:focus {
+  outline: none;
+  border-color: var(--button-color-solid);
+  background: var(--card-bg);
+  box-shadow: 0 0 0 4px var(--shadow-color);
+  transform: translateY(-2px);
+}
+
+.chat-input-field::placeholder {
+  color: var(--text-color);
+  opacity: 0.6;
+}
+
+.chat-input-field::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-input-field::-webkit-scrollbar-track {
+  background: var(--sidebar-bg-solid);
+  border-radius: 10px;
+}
+
+.chat-input-field::-webkit-scrollbar-thumb {
+  background: var(--accent-gradient);
+  border-radius: 10px;
+}
+
+.chat-input-field::-webkit-scrollbar-thumb:hover {
+  background: var(--button-hover-color);
+}
+
+/* 버튼 스타일 */
+.send-button, .upload-button {
+  background: var(--accent-gradient);
+  border: none;
+  border-radius: 50%;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 20px;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  box-shadow: 0 4px 20px var(--shadow-color);
+  position: relative;
+  overflow: hidden;
+}
+
+.send-button::before, .upload-button::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transition: all 0.6s ease;
+  transform: translate(-50%, -50%);
+}
+
+.send-button:hover::before, .upload-button:hover::before {
+  width: 100px;
+  height: 100px;
+}
+
+.send-button:hover, .upload-button:hover {
+  background: var(--button-hover-color);
+  transform: translateY(-4px) scale(1.05);
+  box-shadow: 0 8px 30px var(--shadow-hover);
+}
+
+.send-button:active, .upload-button:active {
+  transform: translateY(-2px) scale(1.02);
+}
+
+.upload-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 캐릭터 초대 모달 */
+.available-characters {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.character-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--surface-gradient);
+  box-shadow: 0 2px 15px rgba(0, 0, 0, 0.05);
+  position: relative;
+  overflow: hidden;
+}
+
+.character-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(116, 185, 255, 0.1), transparent);
+  transition: left 0.6s ease;
+}
+
+.character-card:hover::before {
+  left: 100%;
+}
+
+.character-card:hover {
+  background: var(--surface-gradient);
+  transform: translateY(-3px) scale(1.01);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  border-color: var(--button-color-solid);
+}
+
+.character-card-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid transparent;
+  background: var(--accent-gradient);
+  padding: 2px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.character-card:hover .character-card-avatar {
+  transform: scale(1.05) rotate(3deg);
+  box-shadow: 0 4px 20px var(--shadow-color);
+}
+
+.character-card-info {
+  flex: 1;
+}
+
+.character-card-info h6 {
+  margin: 0 0 5px 0;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.character-card-info p {
+  margin: 0;
+  color: var(--text-color);
+  opacity: 0.7;
+  font-size: 14px;
+}
+
+/* 이미지 관련 스타일 */
+.uploaded-image {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+.image-message {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.image-info {
+  font-size: 12px;
+  color: var(--text-color);
+  opacity: 0.7;
+  text-align: center;
+}
+
+/* 토글 컨트롤 그룹 */
+.toggle-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.toggle-controls .form-check {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toggle-controls .form-check-label {
+  font-size: 13px;
+  color: var(--text-color);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.toggle-controls .form-check-input {
+  margin: 0;
+}
+
+/* 작업 모드 활성화 시 스타일 */
+.work-mode-active .chat-header {
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+}
+
+/* 작업모드 정보 버튼 */
+.work-mode-info-btn {
+  background: none;
+  border: none;
+  color: var(--button-color);
+  font-size: 14px;
+  cursor: pointer;
+  margin-left: 8px;
+  padding: 4px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.work-mode-info-btn:hover {
+  background-color: var(--button-color);
+  color: var(--text-color);
+}
+
+/* 작업모드 설명 모달 스타일 */
+.work-mode-explanation h6 {
+  color: var(--button-hover-color);
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.work-mode-explanation p {
+  margin-bottom: 15px;
+  line-height: 1.6;
+}
+
+.work-mode-explanation hr {
+  margin: 20px 0;
+  border-color: var(--border-color);
+}
+
+/* 자동 호출 메시지 스타일 */
+.auto-called-message {
+  position: relative;
+}
+
+.auto-called-message::before {
+  content: "🔗 자동 호출 " attr(data-auto-sequence);
+  position: absolute;
+  top: -20px;
+  left: 0;
+  font-size: 10px;
+  color: var(--text-color);
+  opacity: 0.6;
+  background: var(--button-color);
+  opacity: 0.2;
+  padding: 2px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--button-color);
+  opacity: 0.3;
+}
+
+.auto-call-limit-reached {
+  background-color: #fff3cd !important;
+  border-color: #ffeaa7 !important;
+  color: #856404 !important;
+}
+
+.auto-call-limit-reached::after {
+  content: " (연속 호출 제한)";
+  font-size: 12px;
+  color: #856404;
+  font-style: italic;
+}
+
+/* 메시지 삭제 버튼 스타일 */
+.message-delete-wrapper {
+  margin-top: 4px;
+  text-align: right;
+}
+
+.message-delete-btn {
+  background: transparent !important;
+  border: none !important;
+  padding: 2px !important;
+  color: transparent !important;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.message-delete-btn i {
+  color: #dc3545 !important;
+  font-size: 14px;
+}
+
+.message-delete-btn:hover i {
+  color: #a71d2a !important;
+}
+
+/* 상황 프롬프트 섹션 스타일 */
+.situation-prompt-section {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    gap: 8px;
+}
+
+.situation-prompt-section .btn {
+    font-size: 13px;
+    padding: 6px 12px;
+}
+
+#knowledgeBtn {
+    margin-left: 8px;
+}
+
+/* 사용자 캐릭터 관리 스타일 */
+.user-characters-list {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--card-bg);
+}
+
+.user-character-item {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.user-character-item:last-child {
+    border-bottom: none;
+}
+
+.user-character-item:hover {
+    background-color: var(--sidebar-bg);
+}
+
+.user-character-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--button-color);
+    margin-right: 10px;
+}
+
+.user-character-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.user-character-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-color);
+    margin-bottom: 2px;
+}
+
+.user-character-status {
+    font-size: 12px;
+    color: var(--text-color);
+    opacity: 0.7;
+}
+
+.user-character-badges {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.user-character-badges .badge {
+    font-size: 10px;
+    padding: 2px 6px;
+}
+
+/* 빈 캐릭터 목록 */
+.no-characters-message {
+    text-align: center;
+    padding: 30px 20px;
+    color: var(--text-color);
+    opacity: 0.6;
+    font-style: italic;
+}
+
+/* 지식 베이스 관련 스타일 */
+.knowledge-list, .applied-knowledge-list {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px;
+}
+
+/* 지식 베이스 리스트 스크롤바 스타일 */
+.knowledge-list::-webkit-scrollbar,
+.applied-knowledge-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.knowledge-list::-webkit-scrollbar-track,
+.applied-knowledge-list::-webkit-scrollbar-track {
+    background: var(--sidebar-bg-solid);
+    border-radius: 4px;
+}
+
+.knowledge-list::-webkit-scrollbar-thumb,
+.applied-knowledge-list::-webkit-scrollbar-thumb {
+    background: var(--accent-gradient);
+    border-radius: 4px;
+    border: 1px solid var(--sidebar-bg-solid);
+}
+
+.knowledge-list::-webkit-scrollbar-thumb:hover,
+.applied-knowledge-list::-webkit-scrollbar-thumb:hover {
+    background: var(--button-hover-color);
+}
+
+.knowledge-item, .applied-knowledge-item {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    cursor: pointer;
+}
+
+.knowledge-item:hover, .applied-knowledge-item:hover {
+    box-shadow: 0 4px 16px var(--shadow-color);
+    transform: translateY(-2px);
+    border-color: var(--button-color);
+}
+
+.knowledge-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.knowledge-title {
+    font-weight: 600;
+    color: var(--text-color);
+    margin: 0;
+    flex: 1;
+}
+
+.knowledge-actions {
+    display: flex;
+    gap: 5px;
+    margin-left: 10px;
+}
+
+.knowledge-toggle {
+    background: none;
+    border: none;
+    color: var(--button-color);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.knowledge-toggle:hover {
+    color: var(--button-hover-color);
+    background: var(--shadow-color);
+    transform: scale(1.1);
+}
+
+.knowledge-content {
+    color: var(--text-color);
+    font-size: 14px;
+    line-height: 1.4;
+    margin-bottom: 8px;
+    display: none; /* 기본적으로 숨김 */
+}
+
+.knowledge-content.show {
+    display: block;
+}
+
+.knowledge-keywords {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 8px;
+}
+
+.knowledge-keywords .keyword {
+    background: var(--button-color);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 12px;
+    margin-right: 5px;
+    display: inline-block;
+    font-size: 11px;
+}
+
+.btn-apply-knowledge {
+    background: var(--button-color);
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-weight: 500;
+}
+
+.btn-apply-knowledge:hover {
+    background: var(--button-hover-color);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(135, 206, 235, 0.3);
+}
+
+.btn-remove-knowledge {
+    background: #dc3545;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-weight: 500;
+}
+
+.btn-remove-knowledge:hover {
+    background: #c82333;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+}
+
+.knowledge-suggestion {
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    border: 1px solid #2196f3;
+    border-radius: 8px;
+    padding: 12px;
+    margin: 10px 0;
+    position: relative;
+}
+
+.knowledge-suggestion-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+    color: #1976d2;
+    font-weight: 600;
+}
+
+.knowledge-suggestion-content {
+    color: #333;
+    font-size: 14px;
+    margin-bottom: 10px;
+}
+
+.knowledge-suggestion-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.btn-suggestion-yes {
+    background: #4caf50;
+    color: white;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.btn-suggestion-yes:hover {
+    background: #45a049;
+}
+
+.btn-suggestion-no {
+    background: #f44336;
+    color: white;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.btn-suggestion-no:hover {
+    background: #da190b;
+}
+
+/* 지식 베이스 다크모드 개선 */
+@media (prefers-color-scheme: dark) {
+    .knowledge-suggestion {
+        background: linear-gradient(135deg, #2a4d6b 0%, #1e3a5f 100%);
+        border: 1px solid var(--button-color);
+    }
+    
+    .knowledge-suggestion-header {
+        color: var(--button-color);
+    }
+    
+    .knowledge-suggestion-content {
+        color: var(--text-color);
+    }
+    
+    .knowledge-keywords {
+        color: var(--text-secondary);
+    }
+    
+    .knowledge-list, .applied-knowledge-list {
+        border-color: var(--border-color);
+        background: var(--surface-gradient);
+    }
+}
+
+/* 지식 베이스 모바일 반응형 */
+@media (max-width: 768px) {
+    #knowledgeModal .modal-dialog {
+        margin: 0.5rem;
+        max-width: calc(100vw - 1rem);
+    }
+    
+    #knowledgeModal .modal-body .row {
+        flex-direction: column;
+    }
+    
+    #knowledgeModal .col-md-6 {
+        width: 100%;
+        margin-bottom: 1rem;
+    }
+    
+    .knowledge-list, .applied-knowledge-list {
+        max-height: 250px;
+    }
+    
+    .knowledge-item, .applied-knowledge-item {
+        padding: 10px;
+        margin-bottom: 8px;
+    }
+    
+    .knowledge-item-header {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .knowledge-actions {
+        margin-left: 0;
+        margin-top: 4px;
+    }
+}
+
+@media (max-width: 480px) {
+    .knowledge-list, .applied-knowledge-list {
+        max-height: 200px;
+        padding: 8px;
+    }
+    
+    .knowledge-item, .applied-knowledge-item {
+        padding: 8px;
+    }
+    
+    .btn-apply-knowledge, .btn-remove-knowledge {
+        padding: 3px 8px;
+        font-size: 11px;
+    }
+}
+
+/* 호감도 상태 표시기 음수 스타일 */
+.affection-status-indicator.negative {
+    background-color: #6c757d; /* 부트스트랩 secondary 색상 */
+}
+
+.affection-status-indicator.negative::before {
+    content: "비호감";
+    color: white;
+}
+
+.affection-type-group {
+    display: flex;
+    gap: 10px;
+}
+
+.affection-type-group .btn {
+    flex: 1;
+}
+
+.affection-type-group .btn.disabled {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    opacity: 0.65;
+}

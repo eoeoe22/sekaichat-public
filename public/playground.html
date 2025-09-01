@@ -1,0 +1,1066 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>세카이 채팅</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <!-- 전체 로딩 오버레이 & 헤더 확장 커스텀 보조 스타일 -->
+    <style>
+        /* 글로벌 로딩 오버레이 */
+        #globalLoadingOverlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 18px;
+            background: #000; /* 변경: 완전 불투명 (기존 rgba(0,0,0,0.55)) */
+            z-index: 5000;
+            transition: opacity .35s ease;
+        }
+        @media (prefers-color-scheme: light) {
+            #globalLoadingOverlay { background: #fff; /* 변경: 완전 불투명 (기존 rgba(255,255,255,0.85)) */ }
+        }
+        #globalLoadingOverlay.fade-out { opacity:0; pointer-events:none; }
+        #globalLoadingOverlay .loading-text {
+            font-size:15px; font-weight:600; letter-spacing:.5px;
+            color:var(--text-color,#fff); opacity:.9;
+        }
+        @media (prefers-color-scheme: dark) { #globalLoadingOverlay .loading-text { color:#fff; } }
+        @media (prefers-color-scheme: light) { #globalLoadingOverlay .loading-text { color:#222; } }
+
+        /* ---------- 상단 확장 영역 정렬 관련 추가 ---------- */
+        .header-controls-content {
+            width:100%;
+            gap:18px;
+        }
+        .header-controls-row {
+            display:flex;
+            width:100%;
+            gap:28px;
+            align-items:flex-start;
+            justify-content:flex-end;   /* ✅ 모든 요소들을 오른쪽 정렬 */
+        }
+        .header-controls-row .model-selector-section {
+            flex:0 0 auto;   /* ✅ flex-grow를 0으로 변경하여 고정폭 */
+            min-width:200px;
+        }
+        .header-controls-row .toggle-controls {
+            flex:0 0 auto;   /* ✅ flex-grow를 0으로 변경하여 고정폭 */
+            display:flex;
+            flex-wrap:wrap;
+            gap:8px 18px;
+            justify-content:flex-end;   /* ✅ 토글들을 오른쪽 정렬 */
+            align-items:flex-start;
+            max-width:760px;
+        }
+        .header-controls-row .toggle-controls .form-check {
+            min-width:160px;
+        }
+
+        /* 상황/지식 버튼 영역 오른쪽 정렬 + 가로선도 그 폭에만 적용 */
+        .situation-prompt-section {
+            display:flex;                 /* ✅ inline-flex에서 flex로 변경 */
+            flex-wrap:wrap;
+            gap:8px;
+            width:100%;                   /* ✅ 전체 폭 사용 */
+            justify-content:flex-end;     /* ✅ 오른쪽 정렬 */
+            padding-top:15px;
+            border-top:1px solid var(--border-color);
+        }
+
+        /* 좁은 화면 대응 */
+        @media (max-width: 900px) {
+            .header-controls-row {
+                flex-direction:column;
+                align-items:flex-end;     /* ✅ 세로 배치시에도 오른쪽 정렬 */
+            }
+            .header-controls-row .toggle-controls {
+                justify-content:flex-end; /* ✅ 작은 화면에서도 오른쪽 정렬 유지 */
+            }
+            .situation-prompt-section {
+                justify-content:flex-end; /* ✅ 작은 화면에서도 오른쪽 정렬 유지 */
+            }
+        }
+        @media (max-width: 560px) {
+            .header-controls-row .toggle-controls .form-check {
+                min-width:140px;
+            }
+        }
+
+        /* 사이드바 헤더 레이아웃 조정 */
+        .sidebar-title-section {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* 뒤로가기 버튼 스타일 */
+        .back-btn {
+            background: none;
+            border: none;
+            color: var(--text-color);
+            font-size: 16px;
+            padding: 4px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 24px;
+            height: 24px;
+        }
+
+        .back-btn:hover {
+            background-color: var(--hover-color, rgba(0, 0, 0, 0.1));
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .back-btn:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+            }
+        }
+
+        /* 호감도 시스템 스타일 */
+        .character-affection-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .character-affection-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            background: var(--bg-color);
+        }
+        
+        .character-affection-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin-right: 15px;
+        }
+        
+        .character-affection-info {
+            flex: 1;
+            margin-right: 15px;
+        }
+        
+        .character-affection-name {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .character-affection-level {
+            font-size: 0.9em;
+            color: var(--text-muted);
+        }
+        
+        .affection-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 200px;
+        }
+        
+        .affection-slider {
+            flex: 1;
+            height: 6px;
+            background: var(--border-color);
+            border-radius: 3px;
+            outline: none;
+            cursor: pointer;
+        }
+        
+        .affection-value {
+            font-weight: 600;
+            min-width: 40px;
+            text-align: center;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        
+        .affection-hostile { background-color: #dc3545; color: white; }
+        .affection-cautious { background-color: #fd7e14; color: white; }
+        .affection-neutral { background-color: #6c757d; color: white; }
+        .affection-positive { background-color: #198754; color: white; }
+        .affection-loving { background-color: #0d6efd; color: white; }
+        /* 추가: 대화내역 불러오기 모달 관련 스타일 */
+        .conversation-modal-list {
+            max-height: 60vh;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        .conversation-modal-item {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            margin-bottom: 10px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            transition: box-shadow 0.2s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+        }
+        .conversation-modal-item.active {
+            border-color: var(--button-color-solid);
+            box-shadow: 0 6px 24px rgba(116,185,255,0.09);
+        }
+        .conversation-modal-title {
+            font-weight: 600;
+            font-size: 1em;
+            flex: 1;
+            color: var(--text-color);
+            margin-right: 10px;
+        }
+        .conversation-modal-participants {
+            display: flex;
+            gap: 2px;
+            margin-right: 8px;
+        }
+        .conversation-modal-avatar {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1px solid var(--border-color);
+            margin-right: 2px;
+        }
+        .conversation-modal-actions {
+            display: flex;
+            gap: 6px;
+        }
+        .conversation-modal-favorite {
+            color: #f8d15b;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        .conversation-modal-delete {
+            color: #dc3545;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        .conversation-modal-favorite.active {
+            color: #f1c40f;
+        }
+        .conversation-modal-no-results {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 30px 0;
+            font-style: italic;
+        }
+        .conversation-modal-search {
+            margin-bottom: 12px;
+        }
+        .conversation-modal-search .input-group {
+            gap: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="globalLoadingOverlay" aria-label="콘텐츠 로딩 중" role="status">
+        <div class="spinner-border text-primary" style="width:4rem;height:4rem;" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <div class="loading-text">로딩 중...</div>
+    </div>
+
+    <div class="chat-container">
+        <!-- ===== 사이드바 영역 ===== -->
+        <div id="sidebar" class="sidebar p-3">
+            <div class="sidebar-header">
+                <div class="sidebar-title-section">
+                    <h6><img src="/logo.jpg" alt="세카이 채팅" class="sidebar-logo"> 세카이 채팅</h6>
+                    <button id="backBtn" class="back-btn" title="메인 페이지로 돌아가기">
+                        <i class="bi bi-box-arrow-left"></i>
+                    </button>
+                </div>
+                <button id="sidebarCloseBtn" class="sidebar-close-btn">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <!-- ✅ footer 를 동일 스크롤 영역에 포함시키기 위해 footer 를 아래로 이동 -->
+            <div class="accordion" id="settingsAccordion">
+                <div class="form-section">
+                    <h6><i class="bi bi-person-lines-fill"></i> | 사용자 정보</h6>
+                    <div id="userInfo"></div>
+                </div>
+                <div class="form-section">
+                    <h6><i class="bi bi-card-list"></i> | 대화내역</h6>
+                    <button id="newConversationBtn" class="btn btn-primary w-100 mb-2">새 대화 시작</button>
+                    <div class="conversation-search mb-3">
+                        <div class="input-group">
+                            <input type="text" id="conversationSearch" class="form-control" placeholder="대화 제목 검색...">
+                            <button class="btn btn-outline-secondary" type="button" id="clearSearchBtn">
+                                <i class="bi bi-x"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="conversationList"></div>
+                </div>
+                <div class="form-section notice-section">
+                    <h6><i class="bi bi-info-circle"></i> | 공지사항</h6>
+                    <p id="noticeContent"></p>
+                </div>
+                <div class="form-section">
+                    <h6><i class="bi bi-gear"></i> | 설정</h6>
+                    <a href="/settings" class="btn btn-outline-primary w-100"><i class="bi bi-box-arrow-up-right"></i> 설정 페이지 열기</a>
+                </div>
+                <!-- ✅ 중복 기능 제거: 내 캐릭터 / 자기소개 / 자동 호출 / 비밀번호 변경 / 닉네임 변경 / API 키 관리 섹션 삭제 -->
+                <button id="logoutBtn" class="btn btn-danger w-100">로그아웃</button>
+
+                <!-- ✅ Footer moved inside scrollable accordion -->
+                <footer class="sidebar-footer">
+                    <div class="sidebar-footer-content">
+                        <div class="sidebar-footer-links">
+                            <span>세카이 채팅</span>
+                            <div class="footer-link-group">
+                                <a href="/characterinfo" target="_blank"><i class="bi bi-person-lines-fill"></i> | 캐릭터 프롬프트</a>
+                                <a href="https://m.dcinside.com/board/pjsekai/2195596" target="_blank"><i class="bi bi-telephone"></i> | 문의/버그제보</a>
+                                <a href="/about"><i class="bi bi-info-circle"></i> | 사이트 정보</a>
+                            </div>
+                        </div>
+                        <div class="sidebar-footeropyright">
+                            <small>&copy; 세카이 채팅</small>
+                        </div>
+                    </div>
+                </footer>
+            </div>
+        </div>
+        <!-- ===== 채팅 메인 ===== -->
+        <div class="chat-main">
+            <div class="chat-header">
+                <div class="profile-section">
+                    <button id="sidebarOpenBtn" class="sidebar-open-btn">
+                        <i class="bi bi-list"></i>
+                    </button>
+                    <div class="profile-info">
+                        <div class="conversation-title-container">
+                            <h5 class="profile-name" id="conversationTitle">세카이 채팅</h5>
+                            <button id="editTitleBtn" class="edit-title-btn" title="제목 수정">
+                                <i class="bi bi-pencil-square"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <button id="settingsOpenBtn" class="header-controls-toggle" data-bs-toggle="modal" data-bs-target="#settingsModal">
+                    <i class="bi bi-gear"></i>
+                </button>
+                <div id="headerControlsContent" class="header-controls-content collapsed" style="display: none;">
+                    <div class="header-controls-row">
+                        <div class="model-selector-section">
+                            <label for="modelSelect" class="form-label">
+                                모델:
+                                <button type="button" class="work-mode-info-btn" data-bs-toggle="modal" data-bs-target="#geminiModelInfoModal">
+                                    <i class="bi bi-info-circle"></i>
+                                </button>
+                            </label>
+                            <select id="modelSelect" class="form-select model-select">
+                                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash(권장)</option>
+                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                            </select>
+                        </div>
+                        <div class="toggle-controls">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="workModeToggle">
+                                <label class="form-check-label" for="workModeToggle">
+                                    <button type="button" class="work-mode-info-btn" data-bs-toggle="modal" data-bs-target="#workModeInfoModal">
+                                        <i class="bi bi-info-circle"></i>
+                                    </button>
+                                    작업 모드
+                                </label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="showTimeToggle" checked>
+                                <label class="form-check-label" for="showTimeToggle">시간 정보 제공 <i class="bi bi-clock"></i></label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="emojiToggle" checked>
+                                <label class="form-check-label" for="emojiToggle">이모지 표시 <i class="bi bi-chat-heart"></i></label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="imageToggle" checked>
+                                <label class="form-check-label" for="imageToggle">챗봇에게 이미지 보여주기 <i class="bi bi-images"></i></label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="markdownToggle">
+                                <label class="form-check-label" for="markdownToggle">
+                                    <button type="button" class="work-mode-info-btn" data-bs-toggle="modal" data-bs-target="#markdownInfoModal" title="마크다운 표시 안내">
+                                        <i class="bi bi-info-circle"></i>
+                                    </button>
+                                    마크다운 표시
+                                </label>
+                            </div>
+                            <div class="form-check form-switch image-toggle-section">
+                                <input class="form-check-input" type="checkbox" id="imageGenerationToggle">
+                                <label class="form-check-label" for="imageGenerationToggle">
+                                    <button type="button" class="work-mode-info-btn" data-bs-toggle="modal" data-bs-target="#imageGenerationInfoModal" title="이미지 생성 기능 안내">
+                                        <i class="bi bi-info-circle"></i>
+                                    </button>
+                                    이미지 생성 <i class="bi bi-palette"></i>
+                                </label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="affectionToggle">
+                                <label class="form-check-label" for="affectionToggle">
+                                    <button type="button" class="work-mode-info-btn" data-bs-toggle="modal" data-bs-target="#affectionInfoModal" title="호감도 시스템 안내">
+                                        <i class="bi bi-info-circle"></i>
+                                    </button>
+                                    호감도 시스템 <i class="bi bi-heart"></i>
+                                </label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="autoReplyToggle">
+                                <label class="form-check-label" for="autoReplyToggle">
+                                    자동 답변 모드 <i class="bi bi-robot"></i>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="situation-prompt-section">
+                        <button id="situationPromptBtn" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-card-text"></i> 상황 설정
+                        </button>
+                        <button id="knowledgeBtn" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-database"></i> 지식
+                        </button>
+                        <button id="affectionBtn" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-heart-fill"></i> 호감도 조절
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div id="chatMessages" class="chat-messages"></div>
+            <!-- === [추가] 대화 시작 전 안내/버튼 영역 === -->
+            <div id="startConversationPanel" style="display:none; width:100%; height:100%; align-items:center; justify-content:center; flex-direction:column; padding:60px 0;">
+                <div style="text-align:center;">
+                    <h5 class="mb-3">아직 대화가 시작되지 않았습니다</h5>
+                    <button id="startConversationBtn" class="btn btn-primary w-100 mb-2" style="max-width:240px; font-size:1.15em;">
+                        <i class="bi bi-chat-dots"></i> 새 대화 시작
+                    </button>
+                    <button id="loadConversationListBtn" class="btn btn-outline-secondary w-100 mb-2" style="max-width:240px; font-size:1.15em;">
+                        <i class="bi bi-journal-text"></i> 대화내역 불러오기
+                    </button>
+                    <div class="text-muted" style="margin-top:8px;">대화를 시작하려면 버튼을 클릭하세요</div>
+                </div>
+            </div>
+            <!-- === [끝 추가] === -->
+            <!-- [추가] 대화내역 불러오기 모달 -->
+            <div class="modal fade" id="conversationListModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-lg"><div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-journal-text"></i> 대화내역 불러오기</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="conversation-modal-search mb-3">
+                            <div class="input-group">
+                                <input type="text" id="modalConversationSearch" class="form-control" placeholder="대화 제목 검색...">
+                                <button class="btn btn-outline-secondary" type="button" id="modalClearSearchBtn">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="conversationModalList" class="conversation-modal-list"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+                    </div>
+                </div></div>
+            </div>
+            <div class="chat-input">
+                <div class="character-management">
+                    <div class="character-management-header">
+                        <button id="inviteCharacterBtn" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-person-plus"></i> 캐릭터 초대
+                        </button>
+                        <span class="character-help-text">캐릭터를 클릭하면 응답을 생성합니다</span>
+                    </div>
+                    <div id="invitedCharacters" class="invited-characters"></div>
+                </div>
+                <div class="input-group">
+                    <input type="file" id="imageInput" accept="image/*" style="display:none;">
+                    <button id="imageUploadBtn" class="upload-button" title="이미지 업로드">
+                        <i class="bi bi-image"></i>
+                    </button>
+                    <textarea id="messageInput" class="chat-input-field" placeholder="메시지를 입력하세요... (Enter: 전송, Shift+Enter: 줄바꿈)" rows="1"></textarea>
+                    <button id="situationButton" class="send-button" title="상황 메시지 전송"><i class="bi bi-card-text"></i></button>
+                    <button id="sendButton" class="send-button"><i class="bi bi-send-fill"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 사용자 캐릭터 관련 모달 ===== -->
+    <div class="modal fade" id="userCharacterModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="userCharacterModalTitle"><i class="bi bi-person-plus"></i> 새 캐릭터 만들기</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="userCharacterForm">
+                    <input type="hidden" id="editingCharacterId" value="">
+                    <div class="form-group mb-3">
+                        <label for="characterName" class="form-label">캐릭터 이름</label>
+                        <input type="text" class="form-control" id="characterName" maxlength="50" required>
+                        <div class="form-text">최대 50자</div>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="characterImage" class="form-label">
+                            프로필 이미지 
+                            <span class="text-danger">*</span>
+                            <small class="text-muted">(200×200px, PNG/JPG/WEBP, 최대 2MB)</small>
+                        </label>
+                        <div class="image-upload-container">
+                            <input type="file" class="form-control" id="characterImage" accept="image/png,image/jpeg,image/webp" required>
+                            <div id="imagePreview" class="image-preview mt-2" style="display:none;">
+                                <img id="previewImg" src="" alt="미리보기" class="preview-image">
+                                <div class="image-info" id="imageInfo"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="characterDescription" class="form-label">캐릭터 한 줄 소개</label>
+                        <input type="text" class="form-control" id="characterDescription" maxlength="100" required placeholder="예: 미야마스자카 여학원의 활기찬 1학년">
+                        <div class="form-text">최대 100자. 다른 캐릭터에게 이 캐릭터가 누구인지 설명합니다.</div>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="characterPrompt" class="form-label">
+                            캐릭터 연기 프롬프트
+                            <button type="button" class="work-mode-info-btn" data-bs-toggle="modal" data-bs-target="#characterCreationHelpModal" title="도움말">
+                                <i class="bi bi-info-circle"></i>
+                            </button>
+                        </label>
+                        <textarea class="form-control" id="characterPrompt" rows="8" maxlength="5000" required placeholder="캐릭터의 성격, 말투, 배경 등을 상세히 설명해주세요."></textarea>
+                        <div class="form-text">최대 5000자. 캐릭터의 성격, 말투, 배경 등을 구체적으로 작성하면 더 자연스러운 대화가 가능합니다.</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-success" id="saveCharacterBtn">
+                    <i class="bi bi-check-lg"></i> 저장
+                </button>
+            </div>
+        </div></div>
+    </div>
+
+    <!-- 사용자 캐릭터 생성 도움말 모달 -->
+    <div class="modal fade" id="characterCreationHelpModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-question-circle"></i> 캐릭터 생성 도움말</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="work-mode-explanation"> 
+                    <h6><i class="bi bi-pencil-square"></i> 캐릭터 프롬프트 작성 가이드</h6>
+                    <p>캐릭터의 성격, 말투, 배경 등을 자세하게 작성하면 AI가 캐릭터를 더 잘 연기할 수 있습니다.</p>
+                    <br>
+                    <p><a href="/characterinfo" target="_blank"><i class="bi bi-person-lines-fill"></i>캐릭터 프롬프트 예시</a></p>
+                    <br>
+                    <p>예시 캐릭터 프롬프트와 동일한 형식으로 작성하는것을 추천합니다.</p>
+                    <hr>
+                    <p><a href="https//aistudio.google.com" taget="_blank">구글 AI스튜디오</a>에서 Gemini 2.5 Pro 모델을 선택하고</p>
+                    <br>
+                    <p>Grounding With Google Search 옵션을 켠 다음</p>
+                    <br>
+                    <p>예시 프롬프트 하나를 복사해 붙여넣은 뒤, 이것과 동일한 형식으로 (캐릭터 이름)의 프롬프트를 작성해달라고 하면 편합니다.</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">확인</button>
+            </div>
+        </div></div>
+    </div>
+
+    <div class="modal fade" id="manageCharacterModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-gear-fill"></i> 캐릭터 관리</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="characterManageContent">
+                    <div class="character-manage-info mb-3">
+                        <img id="manageCharacterImage" src="" alt="캐릭터" class="character-manage-avatar">
+                        <div class="character-manage-details">
+                            <h6 id="manageCharacterName"></h6>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" id="editCharacterBtn">
+                    <i class="bi bi-pencil"></i> 수정
+                </button>
+                <button type="button" class="btn btn-outline-danger" id="deleteCharacterBtn">
+                    <i class="bi bi-trash"></i> 삭제
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+            </div>
+        </div></div>
+    </div>
+
+    <!-- ===== 캐릭터 초대 모달 ===== -->
+    <div class="modal fade" id="inviteModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">캐릭터 초대</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="availableCharacters" class="available-characters"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+            </div>
+        </div></div>
+    </div>
+
+    <div class="modal fade" id="workModeInfoModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-gear-fill"></i> 작업 모드란?</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="work-mode-explanation">
+                    <h6><i class="bi bi-chat-heart"></i> 몰입 모드 (기본)</h6>
+                    <p>캐릭터의 세계관과 성격에 충실한 대화입니다. 캐릭터들이 자신의 설정을 최대한 준수하며 대화를 나눕니다.</p>
+                    <hr>
+                    <h6><i class="bi bi-gear-fill"></i> 작업 모드</h6>
+                    <p>실용적이며 정보 제공 중심의 대화입니다. 캐릭터의 말투는 유지하되, 실질적인 도움을 제공하는 데 집중합니다.</p>
+                    <div class="alert alert-info mt-3">
+                        <i class="bi bi-lightbulb"></i>
+                        <strong>모드별 권장 모델</strong><br>작업 모드<br>
+                        <i class="bi bi-cpu"></i> | Gemini 2.5 Pro<br><br>
+                        몰입 모드<br>
+                        <i class="bi bi-stars"></i> | Gemini 2.5 Flash<br>
+                        <i class="bi bi-lightning-charge"></i> | Gemini 2.5 Flash Lite
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">확인</button>
+            </div>
+        </div></div>
+    </div>
+
+    <div class="modal fade" id="geminiModelInfoModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-cpu"></i> Gemini 모델 비교</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="model-explanation">
+                    <h6><i class="bi bi-lightning-charge-fill"></i> Gemini 2.5 Flash (권장)</h6>
+                    <p>균형 잡힌 성능과 속도를 제공하는 최신 모델입니다. 일반적인 대화에 가장 적합합니다.</p>
+                    <hr>
+                    <h6><i class="bi bi-lightning-charge"></i> Gemini 2.5 Flash Lite (권장)</h6>
+                    <p>빠른 응답 속도에 최적화된 경량 모델입니다. 일상 대화와 빠른 상호작용에 적합합니다.</p>
+                    <hr>
+                    <h6><i class="bi bi-cpu-fill"></i> Gemini 2.5 Pro</h6>
+                    <p>가장 강력한 성능과 고급 추론을 제공하는 최고 성능 모델입니다. 복잡한 질문이나 작업 모드에 최적화되어 있습니다.</p>
+                    <hr>
+                    <h6><i class="bi bi-speedometer2"></i> Gemini 2.0 Flash</h6>
+                    <p>이전 세대 모델로, 안정적인 성능을 제공합니다.</p>
+                    <hr>
+                    <h6><i class="bi bi-exclamation-triangle"></i> Gemini 2.0 Flash Lite (미권장)</h6>
+                    <p>구버전 경량 모델로, 품질이 낮을 수 있습니다.</p>
+                    <div class="alert alert-success mt-3">
+                        <i class="bi bi-lightbulb"></i>
+                        <strong>추천 사용법</strong><br>
+                        일반 대화: <strong>Gemini 2.5 Flash</strong><br>
+                        빠른 응답: <strong>Gemini 2.5 Flash Lite</strong><br>
+                        복잡한 작업: <strong>Gemini 2.5 Pro</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">확인</button>
+            </div>
+        </div></div>
+    </div>
+
+    <div class="modal fade" id="editTitleModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-pencil-square"></i> 대화 제목 수정</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editTitleForm">
+                    <div class="form-group">
+                        <label for="newTitleInput" class="form-label">새 제목</label>
+                        <input type="text" class="form-control" id="newTitleInput" maxlength="100" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-primary" id="saveTitleBtn">저장</button>
+            </div>
+        </div></div>
+    </div>
+
+    <div class="modal fade" id="situationPromptModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-card-text"></i> 상황 설정 프롬프트</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="situationPromptForm">
+                    <div class="form-group">
+                        <label for="situationPromptInput" class="form-label">상황 설정</label>
+                        <textarea class="form-control" id="situationPromptInput" rows="6" placeholder="상황, 장소 등을 설정하세요. 예: '학교 옥상에서 점심시간', '카페에서 비가 오는 날'"></textarea>
+                        <div class="form-text">이 설정은 현재 대화에만 적용됩니다. 캐릭터들이 해당 상황을 인지하고 대화합니다.</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-danger" id="clearSituationBtn">설정 삭제</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-primary" id="saveSituationBtn">저장</button>
+            </div>
+        </div></div>
+    </div>
+
+    <div class="modal fade" id="knowledgeModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-database"></i> 지식 베이스 관리</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6><i class="bi bi-list-ul"></i> 전체 지식 목록</h6>
+                        </div>
+                        <div id="knowledgeList" class="knowledge-list"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-check2-square"></i> 현재 대화에 적용된 지식</h6>
+                        <div id="appliedKnowledgeList" class="applied-knowledge-list"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+            </div>
+        </div></div>
+    </div>
+
+    <div class="modal fade" id="uploadModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-sm"><div class="modal-content">
+            <div class="modal-body text-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2"><i class="bi bi-cloud-arrow-up"></i> | 이미지 업로드 중...</p>
+            </div>
+        </div></div>
+    </div>
+
+    <div class="modal fade" id="markdownInfoModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-markdown"></i> 마크다운 표시 안내</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
+            </div>
+            <div class="modal-body">
+                <p>"마크다운 표시"를 켜면 메시지의 마크다운 문법(굵게/기울임/코드/링크/리스트/헤딩/인용 등)이 렌더링됩니다.</p>
+                <ul>
+                    <li>표(Table)는 렌더링되지 않고 제거됩니다.</li>
+                    <li>이미지 문법 ![alt](url) 은 alt 텍스트만 남습니다.</li>
+                    <li>링크 [텍스트](url) 는 텍스트만 표시됩니다.</li>
+                    <li>코드 블록과 인라인 코드는 HTML로 안전하게 표시됩니다.</li>
+                </ul>
+                <p>끄면 마크다운 문법 기호가 제거된 일반 텍스트만 보여집니다. (예: <code>**예시**</code> → <code>예시</code>)</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" data-bs-dismiss="modal">확인</button>
+            </div>
+        </div></div>
+    </div>
+
+    <div class="modal fade" id="imageGenerationInfoModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-palette"></i> 이미지 생성 기능 안내</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>FLUX.1 [schnell] 이미지 생성 기능:</strong></p>
+                <ul>
+                    <li>특정 캐릭터들이 그림을 그려달라는 요청에 응답할 수 있습니다</li>
+                    <li>생성된 이미지는 채팅에서 캐릭터 메시지 아래에 표시됩니다</li>
+                    <li>따로 스타일을 요청하지 않으면 이미지는 연필 스케치 스타일로 생성되며, 400×400 해상도입니다</li>
+                    <li><strong>20초 쿨다운</strong>이 적용됩니다 (과도한 사용 방지)</li>
+                </ul>
+                <p><strong>사용 방법:</strong></p>
+                <ol>
+                    <li>이미지 생성 토글을 활성화하세요 (지원 캐릭터가 있으면 자동 활성화)</li>
+                    <li>지원 캐릭터에게 그림을 그려달라고 요청하세요</li>
+                    <li>예시: "무대에서 노래하는 미쿠 그려줘",</li>
+                    <li>캐릭터가 이미지 생성 명령과 함께 응답하면 자동으로 이미지가 생성됩니다</li>
+                </ol>
+                <p><strong>지원 캐릭터:</strong></p>
+                <ul>
+                    <li>세카이 캐릭터: <span class="badge bg-primary">시노노메 에나</span>, <span class="badge bg-primary">모치즈키 호나미</span></li>
+                    <li>사용자 커스텀 캐릭터: 모든 커스텀 캐릭터 지원</li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">확인</button>
+            </div>
+        </div></div>
+    </div>
+
+    <div class="modal fade" id="affectionInfoModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-heart-fill"></i> 호감도 시스템 안내</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>호감도 시스템:</strong></p>
+                <ul>
+                    <li>대화 내용에 따라 캐릭터의 호감도가 자동으로 변화합니다.</li>
+                    <li>호감도 범위: -100 ~ +100 (기본값: 0)</li>
+                    <li>호감 상태: 우정, 애정 (호감도가 0 이상일 때만 선택 가능)</li>
+                    <li>호감도와 호감 상태에 따라 캐릭터의 대화 스타일이 변화합니다.</li>
+                    <li>수동으로 호감도를 조절할 수도 있습니다.</li>
+                </ul>
+                <p><strong>호감도 범위별 행동:</strong></p>
+                <ul>
+                    <li><span class="badge bg-danger">-100 ~ -51</span>: 적대적</li>
+                    <li><span class="badge bg-warning">-50 ~ -1</span>: 부정적</li>
+                    <li><span class="badge bg-secondary">0 ~ 49</span>: 중립/친구</li>
+                    <li><span class="badge bg-success">50 ~ 100</span>: 긍정적/애정</li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">확인</button>
+            </div>
+        </div></div>
+    </div>
+
+    <div class="modal fade" id="affectionModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-heart-fill"></i> 호감도 관리</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="affectionSystemStatus" class="mb-3">
+                    <!-- 상태 메시지 -->
+                </div>
+                <div id="affectionCharacterList" class="character-affection-list">
+                    <!-- 캐릭터 목록이 여기에 동적으로 생성됩니다 -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+            </div>
+        </div></div>
+    </div>
+
+    <!-- ===== 에러 표시용 모달 ===== -->
+    <div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="errorModalLabel"><i class="bi bi-exclamation-triangle-fill"></i> 오류</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="errorModalBody">
+                    <!-- 에러 메시지가 여기에 삽입됩니다. -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal fade" id="settingsModal" tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="settingsModalLabel"><i class="bi bi-gear-fill"></i> 대화 설정</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="modalSettingsContent">
+                        <!-- Content will be moved here from header -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">닫기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 뒤로가기 버튼 이벤트 리스너
+            const backBtn = document.getElementById('backBtn');
+            if (backBtn) {
+                backBtn.addEventListener('click', function() {
+                    window.location.href = '/main';
+                });
+            }
+        });
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <script src="/js/user-characters.js"></script>
+    <script src="/js/knowledge-base.js"></script>
+    <script src="/js/chat.js"></script>
+    <!-- [추가] 대화내역 불러오기 모달 기능 스크립트 -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 대화내역 불러오기 버튼 이벤트
+        var loadConvBtn = document.getElementById('loadConversationListBtn');
+        if (loadConvBtn) {
+            loadConvBtn.addEventListener('click', function() {
+                showConversationListModal();
+            });
+        }
+        // 모달 검색 이벤트
+        var modalSearchInput = document.getElementById('modalConversationSearch');
+        if (modalSearchInput) {
+            modalSearchInput.addEventListener('input', function(e) {
+                window.conversationModalSearchQuery = e.target.value.trim().toLowerCase();
+                renderConversationModalList();
+            });
+        }
+        var modalClearBtn = document.getElementById('modalClearSearchBtn');
+        if (modalClearBtn) {
+            modalClearBtn.addEventListener('click', function() {
+                var modalSearchInput = document.getElementById('modalConversationSearch');
+                if (modalSearchInput) modalSearchInput.value = '';
+                window.conversationModalSearchQuery = '';
+                renderConversationModalList();
+            });
+        }
+    });
+
+    // 모달 띄우기 함수
+    function showConversationListModal() {
+        var modal = new bootstrap.Modal(document.getElementById('conversationListModal'));
+        window.conversationModalSearchQuery = '';
+        renderConversationModalList();
+        modal.show();
+    }
+
+    // 모달 내 대화 목록 렌더링 함수
+    function renderConversationModalList() {
+        var listDiv = document.getElementById('conversationModalList');
+        if (!listDiv) return;
+        listDiv.innerHTML = '';
+        var conversations = window.allConversations || [];
+        var searchQuery = window.conversationModalSearchQuery || '';
+        // 검색 필터 적용
+        var filtered = conversations;
+        if (searchQuery) {
+            filtered = conversations.filter(conv =>
+                conv.title && conv.title.toLowerCase().includes(searchQuery)
+            );
+        }
+        // 즐겨찾기 우선 정렬
+        filtered.sort((a, b) => {
+            if (a.is_favorite && !b.is_favorite) return -1;
+            if (!a.is_favorite && b.is_favorite) return 1;
+            return new Date(b.created_at) - new Date(a.created_at);
+        });
+        if (filtered.length === 0) {
+            listDiv.innerHTML = '<div class="conversation-modal-no-results">검색 결과가 없습니다</div>';
+            return;
+        }
+        filtered.forEach(conv => {
+            var itemDiv = document.createElement('div');
+            itemDiv.className = 'conversation-modal-item' + (conv.id === window.currentConversationId ? ' active' : '');
+            // 참여 캐릭터 표시
+            var participantHtml = '';
+            if (conv.participant_images) {
+                var imgs = conv.participant_images;
+                var maxAvatars = 8;
+                var displayed = imgs.slice(0, maxAvatars);
+                participantHtml = displayed.map(img =>
+                    `<img src="${img}" class="conversation-modal-avatar" style="transform: rotate(${Math.random()*12-6}deg);">`
+                ).join('');
+                if (imgs.length > maxAvatars) {
+                    participantHtml += `<span class="conversation-modal-avatar">...</span>`;
+                }
+            }
+            // 제목 이모지 제거 및 escape
+            var cleanTitle = (conv.title || '').replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|[\u2600-\u26FF]|[\uD83C-\uDBFF][\uDC00-\uDFFF])/g, '');
+            var escapedTitle = document.createElement('span');
+            escapedTitle.textContent = cleanTitle;
+            var actionsHtml = `
+                <span class="conversation-modal-favorite${conv.is_favorite ? ' active' : ''}" title="즐겨찾기" onclick="window.toggleFavoriteModalConversation(${conv.id},event)">
+                    <i class="bi ${conv.is_favorite ? 'bi-star-fill' : 'bi-star'}"></i>
+                </span>
+                ${!conv.is_favorite ? `<span class="conversation-modal-delete" title="삭제" onclick="window.deleteModalConversation(${conv.id},event)"><i class="bi bi-trash"></i></span>` : ''}
+            `;
+            itemDiv.innerHTML = `
+                <span class="conversation-modal-title" onclick="window.loadModalConversation(${conv.id})" style="cursor:pointer;">${escapedTitle.innerHTML}</span>
+                <span class="conversation-modal-participants">${participantHtml}</span>
+                <span class="conversation-modal-actions">${actionsHtml}</span>
+            `;
+            listDiv.appendChild(itemDiv);
+        });
+    }
+    // 모달 내 대화 선택 함수
+    window.loadModalConversation = function(conversationId) {
+        // 대화 불러오기
+        if (window.loadConversation) window.loadConversation(conversationId);
+        // 모달 닫기
+        var modalEl = document.getElementById('conversationListModal');
+        if (modalEl) {
+            var modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+        }
+    };
+    // 모달 내 즐겨찾기 토글
+    window.toggleFavoriteModalConversation = function(conversationId, event) {
+        event.stopPropagation();
+        if (window.toggleFavorite) {
+            window.toggleFavorite(conversationId, event);
+            setTimeout(renderConversationModalList, 700);
+        }
+    };
+    // 모달 내 대화 삭제
+    window.deleteModalConversation = function(conversationId, event) {
+        event.stopPropagation();
+        if (window.deleteConversation) {
+            window.deleteConversation(conversationId);
+            setTimeout(renderConversationModalList, 700);
+        }
+    };
+    </script>
+</body>
+</html>

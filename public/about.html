@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About - 세카이 채팅</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+    <style>
+        :root {
+            --bg-color: #fdfdfd;
+            --button-color: #87CEEB;
+            --button-hover-color: #4682B4;
+            --text-color: #2d3436;
+            --text-secondary: #636e72;
+            --border-color: #e9ecef;
+            --card-bg: #ffffff;
+            --shadow-color: rgba(135, 206, 235, 0.15);
+            --shadow-hover: rgba(70, 130, 180, 0.25);
+            --accent-gradient: linear-gradient(135deg, #87CEEB 0%, #4682B4 100%);
+        }
+
+        /* 다크모드 변수 */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #1e1e2e;
+                --button-color: #87CEEB;
+                --button-hover-color: #4682B4;
+                --text-color: #f8f8f2;
+                --text-secondary: #a8a8a2;
+                --border-color: #44475a;
+                --card-bg: #282a36;
+                --shadow-color: rgba(135, 206, 235, 0.2);
+                --shadow-hover: rgba(70, 130, 180, 0.3);
+                --accent-gradient: linear-gradient(135deg, #87CEEB 0%, #4682B4 100%);
+            }
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.7;
+            min-height: 100vh;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .about-container {
+            max-width: 900px;
+            margin: 40px auto 0 auto;
+            padding: 50px 40px;
+            background: var(--card-bg);
+            border-radius: 24px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.08);
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .about-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: var(--accent-gradient);
+        }
+
+        .about-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .about-logo {
+            font-size: 64px;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 20px;
+        }
+
+        .about-title {
+            font-size: 2.8rem;
+            font-weight: 800;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 15px;
+            letter-spacing: -0.02em;
+        }
+
+        .about-subtitle {
+            color: var(--text-secondary);
+            font-size: 1.2rem;
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+
+        .about-section {
+            margin-bottom: 40px;
+            padding: 30px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+            transition: all 0.3s ease;
+        }
+
+        .about-section:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.1);
+        }
+
+        .about-section-title {
+            color: var(--button-hover-color);
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .about-section-title i {
+            color: var(--button-color);
+            font-size: 1.4rem;
+        }
+
+        .about-section p {
+            color: var(--text-color);
+            font-size: 1rem;
+            line-height: 1.7;
+            margin-bottom: 15px;
+        }
+
+        .about-section ul {
+            padding-left: 20px;
+        }
+
+        .about-section li {
+            color: var(--text-color);
+            margin-bottom: 12px;
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
+        .about-link {
+            color: var(--button-color);
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .about-link:hover {
+            color: var(--button-hover-color);
+            text-decoration: none;
+        }
+
+        .about-link::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--button-hover-color);
+            transition: width 0.3s ease;
+        }
+
+        .about-link:hover::after {
+            width: 100%;
+        }
+
+        .tech-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            background: var(--button-color);
+            color: white;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin: 5px 5px 5px 0;
+            transition: all 0.3s ease;
+        }
+
+        .tech-badge:hover {
+            background: var(--button-hover-color);
+            transform: translateY(-2px);
+        }
+
+        .action-buttons {
+            text-align: center;
+            margin-top: 50px;
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 16px 32px;
+            border-radius: 16px;
+            font-weight: 600;
+            font-size: 1rem;
+            text-decoration: none;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            border: none;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-primary {
+            background: var(--accent-gradient);
+            color: white;
+            box-shadow: 0 6px 25px var(--shadow-color);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 10px 35px var(--shadow-hover);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: var(--card-bg);
+            color: var(--text-color);
+            border: 2px solid var(--border-color);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+
+        .btn-secondary:hover {
+            background: var(--button-color);
+            color: white;
+            border-color: var(--button-color);
+            transform: translateY(-2px);
+        }
+
+        .footer-info {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 30px;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .highlight-box {
+            background: linear-gradient(135deg, rgba(135, 206, 235, 0.1) 0%, rgba(70, 130, 180, 0.1) 100%);
+            border: 1px solid var(--button-color);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        .highlight-box::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--button-color);
+            border-radius: 2px;
+        }
+
+        /* 모바일 반응형 */
+        @media (max-width: 768px) {
+            .about-container {
+                margin: 20px;
+                padding: 30px 25px;
+                border-radius: 20px;
+            }
+
+            .about-title {
+                font-size: 2.2rem;
+            }
+
+            .about-subtitle {
+                font-size: 1.1rem;
+            }
+
+            .about-section {
+                padding: 20px;
+                margin-bottom: 25px;
+            }
+
+            .about-section-title {
+                font-size: 1.2rem;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .btn {
+                padding: 14px 28px;
+                font-size: 0.95rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .about-container {
+                margin: 15px;
+                padding: 25px 20px;
+            }
+
+            .about-title {
+                font-size: 2rem;
+            }
+
+            .about-section {
+                padding: 18px;
+            }
+
+            .about-logo {
+                font-size: 48px;
+            }
+        }
+
+        /* 다크모드 추가 스타일 */
+        @media (prefers-color-scheme: dark) {
+            .highlight-box {
+                background: linear-gradient(135deg, rgba(135, 206, 235, 0.15) 0%, rgba(70, 130, 180, 0.15) 100%);
+            }
+
+            .tech-badge {
+                box-shadow: 0 2px 10px rgba(135, 206, 235, 0.3);
+            }
+        }
+
+        /* 스크롤바 스타일 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--card-bg);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--button-color);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--button-hover-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="about-container">
+            <div class="about-header">
+                <div class="about-logo">
+                    <i class="bi bi-chat-heart-fill"></i>
+                </div>
+                <div class="about-title">세카이 채팅</div>
+                <div class="about-subtitle">Google Gemini 기반 다중 캐릭터 챗봇 프로젝트</div>
+            </div>
+            
+            <div class="about-section">
+                <div class="about-section-title">
+                    <i class="bi bi-flag"></i>
+                    프로젝트 개요
+                </div>
+                <p>
+                    세카이 채팅은 다양한 캐릭터와 대화할 수 있는 다중 캐릭터 AI 챗봇 서비스입니다. 
+                    실시간 대화, 이미지 업로드, 캐릭터 프롬프트 및 커스텀 이모지를 지원하며, 
+                    Google Gemini API 기반의 자연스러운 언어 처리와 주제별 작업 모드를 제공합니다.
+                </p>
+                <div class="highlight-box">
+                    <p><strong><i class="bi bi-info-circle"></i> 이 사이트는 비영리 2차 창작물입니다.</strong></p>
+                    <p><i class="bi bi-currency-dollar"></i> 서버비 0원 / 수익 0원</p>
+                </div>
+            </div>
+
+            <div class="about-section">
+                <div class="about-section-title">
+                    <i class="bi bi-stars"></i>
+                    주요 특징
+                </div>
+                <ul>
+                    <li>여러 캐릭터와의 멀티 대화, 초대/호출/챗봇들간 자동 호출</li>
+                    <li>개인 Gemini API 키 등록/사용자 닉네임/자기소개 설정</li>
+                    <li>자연스러운 대화의 기본 모드, 유용한 답변을 제공하는 작업 모드 지원</li>
+                    <li>실시간 이미지 업로드 및 분석</li>
+                    <li>커스텀 이모지 및 상황 설정 기능</li>
+                </ul>
+            </div>
+
+            <div class="about-section">
+                <div class="about-section-title">
+                    <i class="bi bi-person-badge"></i>
+                    제작자 & 문의
+                </div>
+                <p><strong>제작/관리:</strong> 유동닉 (eoeoe)</p>
+                <p><strong>문의/버그제보:</strong></p>
+                <ul>
+                    <li>
+                        <a href="https://gall.dcinside.com/m/thesingularity/776222" class="about-link" target="_blank">
+                            <i class="bi bi-box-arrow-up-right"></i> 어지간하면 여기 댓글
+                        </a>
+                    </li>
+                    <li>
+                        <i class="bi bi-envelope-fill"></i> 
+                        <a href="mailto:eoe@vialinks.xyz" class="about-link">eoe@vialinks.xyz</a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="about-section">
+                <div class="about-section-title">
+                    <i class="bi bi-shield-check"></i>
+                    개인정보/운영 안내
+                </div>
+                <ul>
+                    <li>서버·DB는 Cloudflare Workers/D1에 보관되며, 비밀번호는 해시+솔팅 암호화하여 저장합니다.</li>
+                    <li>개인 Gemini API키는 사용자가 직접 입력시 서버 DB에 저장하고, 삭제 버튼 클릭시 즉시 완전 삭제됩니다.</li>
+                    <li>모든 대화 데이터/파일은 Gemini API 이외 외부 사이트로 전송하거나 이용하지 않습니다</li>
+                </ul>
+            </div>
+
+            <div class="about-section">
+                <div class="about-section-title">
+                    <i class="bi bi-cpu"></i>
+                    AI 모델 및 기술 스택
+                </div>
+                <p>
+                    <span class="tech-badge">
+                        <i class="bi bi-google"></i> Google Gemini
+                    </span>
+                    가 챗봇의 핵심을 담당하며, 대화와 이미지를 처리합니다.
+                </p>
+                <div style="margin-top: 20px;">
+                    <span class="tech-badge">
+                        <i class="bi bi-cloud"></i> Cloudflare Workers
+                    </span>
+                    <span class="tech-badge">
+                        <i class="bi bi-database"></i> D1 Database
+                    </span>
+                    <span class="tech-badge">
+                        <i class="bi bi-file-earmark"></i> R2 Storage
+                    </span>
+                    <span class="tech-badge">
+                        <i class="bi bi-code-slash"></i> JavaScript
+                    </span>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <a href="/" class="btn btn-primary">
+                    <i class="bi bi-house"></i> 홈으로
+                </a>
+                <a href="/playground" class="btn btn-secondary">
+                    <i class="bi bi-chat-dots"></i> 채팅 시작
+                </a>
+                <a href="/characterinfo" class="btn btn-secondary">
+                    <i class="bi bi-person-lines-fill"></i> 캐릭터 정보
+                </a>
+            </div>
+
+            <div class="footer-info">
+                &copy; 2025 세카이 채팅 Project | Powered by 
+                <i class="bi bi-google"></i> Google Gemini, 
+                <i class="bi bi-cloud"></i> Cloudflare Workers
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

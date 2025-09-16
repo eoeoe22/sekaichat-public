@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>세카이 채팅</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="/css/landing.css" />
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light sticky-top">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <img src="/logo.jpg" alt="Logo" width="30" height="30" class="d-inline-block align-text-top rounded-circle me-2">
+                세카이 채팅
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link btn btn-outline-primary btn-sm px-3" href="/login">로그인</a>
+                    </li>
+                    <br>
+                    <li class="nav-item ms-2">
+                        <a class="nav-link btn btn-primary btn-sm text-white px-3" href="/register">회원가입</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div class="container">
+            <h1 class="hero-title">Sekaich.at<br>AI 캐릭터 챗봇</h1>
+            <p class="hero-subtitle">당신이 좋아하는 캐릭터와 자유롭게 대화하세요.</p>
+            <a href="/login" class="btn btn-light">로그인 <i class="bi bi-box-arrow-in-right"></i></a>
+            <a href="/register" class="btn btn-light ms-2">지금 시작하기 <i class="bi bi-arrow-right"></i></a>
+            <br><br><br>
+            <a href="/guest/verify" class="btn btn-outline-light ms-2">게스트로 체험하기</a>
+            <br><br>
+            <a href="/autorag" class="btn btn-outline-light ms-2">AutoRAG 스토리 검색 <i class="bi bi-search"></i></a>
+        </div>
+    </header>
+
+    <section id="about" class="section">
+        <div class="container">
+            <div class="about-container anim-on-scroll fade-in">
+                <div class="about-header">
+                    <div class="about-logo anim-on-scroll fade-in">
+                        <i class="bi bi-chat-heart-fill"></i>
+                    </div>
+                    <div class="about-title anim-on-scroll fade-in" style="transition-delay: 0.1s;">세카이 채팅</div>
+                    <div class="about-subtitle anim-on-scroll fade-in" style="transition-delay: 0.2s;">Google Gemini 기반 다중 캐릭터 챗봇 프로젝트</div>
+                </div>
+                
+                <div class="about-section">
+                    <div class="about-section-title anim-on-scroll slide-in-left">
+                        <i class="bi bi-flag"></i>
+                        프로젝트 개요
+                    </div>
+                    <p class="anim-on-scroll slide-in-right">
+                        세카이 채팅은 다양한 캐릭터와 대화할 수 있는 다중 캐릭터 AI 챗봇 서비스입니다. 
+                        실시간 대화, 이미지 업로드, 캐릭터 프롬프트 및 커스텀 이모지를 지원하며, 
+                        Google Gemini API 기반의 자연스러운 언어 처리와 주제별 작업 모드를 제공합니다.
+                    </p>
+                    <div class="highlight-box anim-on-scroll fade-in" style="transition-delay: 0.3s;">
+                        <p><strong><i class="bi bi-info-circle"></i> 이 사이트는 비영리 2차 창작물입니다.</strong></p>
+                        <p><i class="bi bi-currency-dollar"></i> 서버비 0원 / 수익 0원</p>
+                    </div>
+                </div>
+
+                <div class="about-section">
+                    <div class="about-section-title anim-on-scroll slide-in-left">
+                        <i class="bi bi-stars"></i>
+                        주요 기능
+                    </div>
+                    <div class="row g-4 mt-3">
+                        <div class="col-md-4">
+                            <div class="feature-card h-100 anim-on-scroll fade-in">
+                                <div class="feature-icon"><i class="bi bi-people-fill"></i></div>
+                                <h3>다중 캐릭터 대화</h3>
+                                <p>여러 AI 캐릭터를 하나의 대화에 초대하여 그룹으로 대화할 수 있습니다.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="feature-card h-100 anim-on-scroll fade-in" style="transition-delay: 0.1s;">
+                                <div class="feature-icon"><i class="bi bi-heart-fill"></i></div>
+                                <h3>AI 미연시</h3>
+                                <p>AI 캐릭터와 교감하며 애정도를 쌓아가는 미연시 모드를 즐겨보세요. 당신의 선택이 캐릭터와의 관계를 변화시킵니다. (개발 중)</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="feature-card h-100 anim-on-scroll fade-in" style="transition-delay: 0.2s;">
+                                <div class="feature-icon"><i class="bi bi-person-plus-fill"></i></div>
+                                <h3>나만의 캐릭터 제작</h3>
+                                <p>자신만의 AI 캐릭터를 직접 만들고 대화할 수 있습니다. 캐릭터의 성격, 배경, 말투를 직접 설정해 대화에 초대할수 있습니다.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="feature-card h-100 anim-on-scroll fade-in" style="transition-delay: 0.3s;">
+                                <div class="feature-icon"><i class="bi bi-palette-fill"></i></div>
+                                <h3>이미지 생성 & 업로드</h3>
+                                <p>Gemini의 멀티모달 기능으로 이미지 업로드는 물론, AI가 직접 그림을 그려주는 이미지 생성 기능도 지원합니다.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="feature-card h-100 anim-on-scroll fade-in" style="transition-delay: 0.4s;">
+                                <div class="feature-icon"><i class="bi bi-gear-fill"></i></div>
+                                <h3>자유로운 커스텀</h3>
+                                <p>개인 Gemini API 키, 닉네임, 자기소개, 커스텀 이모지 등 다양한 설정을 통해 자신만의 환경을 만들 수 있습니다.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="feature-card h-100 anim-on-scroll fade-in" style="transition-delay: 0.5s;">
+                                <div class="feature-icon"><i class="bi bi-lightbulb-fill"></i></div>
+                                <h3>두가지 대화 모드</h3>
+                                <p>자연스러운 대화를 위한 '기본 모드'와, 유용한 답변을 제공하는 '작업 모드'를 지원합니다.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="feature-card h-100 anim-on-scroll fade-in" style="transition-delay: 0.6s;">
+                                <div class="feature-icon"><i class="bi bi-search"></i></div>
+                                <h3>이벤트 스토리 RAG 검색</h3>
+                                <p>프로젝트 세카이 한국서버의 이벤트 스토리 전체를 임베딩한 벡터 데이터베이스에서 연관성 기반 RAG검색이 가능합니다.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="about-section">
+                    <div class="about-section-title anim-on-scroll slide-in-left">
+                        <i class="bi bi-palette2"></i>
+                        Gemini Native 이미지 생성
+                    </div>
+                    <div class="anim-on-scroll slide-in-right">
+                        <p>AI 에나낭이 직접 그려주는 이미지 생성 기능을 체험해보세요.<br>간단한 요청만으로 다양한 스타일의 그림을 생성할 수 있습니다.<br>현재 Gemini 2.5 Flash 이미지 생성 기능이 불안정해 2.0 Flash 모델로 구동중)</p>
+                        <div class="row g-4 mt-3">
+                            <div class="col-md-6">
+                                <div class="image-showcase anim-on-scroll fade-in" style="transition-delay: 0.1s;">
+                                    <img src="/images/etc/enanobanana.png" alt="AI 생성 이미지 예시 1" class="showcase-image">
+                                    <div class="image-caption">(Gemini 2.5 Flash Native Image)</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="image-showcase anim-on-scroll fade-in" style="transition-delay: 0.2s;">
+                                    <img src="/images/etc/enanobanana1.png" alt="AI 생성 이미지 예시 2" class="showcase-image">
+                                    <div class="image-caption">(Gemini 2.5 Flash Native Image)</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="highlight-box anim-on-scroll fade-in" style="transition-delay: 0.3s;">
+                            <p><strong><i class="bi bi-lightbulb"></i> 사용법:</strong> 채팅에서 "그림을 그려줘", "이미지를 만들어줘" 등으로 요청하면 AI가 자동으로 이미지를 생성합니다.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="about-section">
+                    <div class="about-section-title anim-on-scroll slide-in-left">
+                        <i class="bi bi-person-badge"></i>
+                        제작자 & 문의
+                    </div>
+                    <div class="anim-on-scroll slide-in-right">
+                        <p><strong>제작/관리:</strong> 유동닉 (eoeoe)</p>
+                        <p><strong>문의/버그제보:</strong></p>
+                        <ul>
+                            <li>
+                                <a href="https://gall.dcinside.com/m/thesingularity/776222" class="about-link" target="_blank">
+                                    <i class="bi bi-box-arrow-up-right"></i> 어지간하면 여기 댓글
+                                </a>
+                            </li>
+                            <li>
+                                <i class="bi bi-envelope-fill"></i> 
+                                <a href="mailto:eoe@vialinks.xyz" class="about-link">eoe@vialinks.xyz</a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="about-section">
+                    <div class="about-section-title anim-on-scroll slide-in-left">
+                        <i class="bi bi-shield-check"></i>
+                        개인정보/운영 안내
+                    </div>
+                    <ul class="anim-on-scroll slide-in-right">
+                        <li>서버·DB는 Cloudflare Workers/D1에 보관되며, 비밀번호는 해시+솔팅 암호화하여 저장합니다.</li>
+                        <li>개인 Gemini API키는 사용자가 직접 입력시 서버 DB에 저장하고, 삭제 버튼 클릭시 즉시 완전 삭제됩니다.</li>
+                        <li>모든 대화 데이터/파일은 Gemini API 이외 외부 사이트로 전송하거나 이용하지 않습니다</li>
+                    </ul>
+                </div>
+
+                <div class="about-section">
+                    <div class="about-section-title anim-on-scroll slide-in-left">
+                        <i class="bi bi-cpu"></i>
+                        AI 모델 및 기술 스택
+                    </div>
+                    <div class="anim-on-scroll slide-in-right">
+                        <p>
+                            <span class="tech-badge">
+                                <img src="/images/characters/gemini.png" class="tech-logo" alt="Gemini"> Google Gemini
+                            </span>
+                            가 챗봇의 핵심을 담당하며, 대화와 이미지를 처리합니다.
+                        </p>
+                        <div style="margin-top: 20px;">
+                            <span class="tech-badge anim-on-scroll fade-in" style="transition-delay: 0.1s;">
+                                <img src="/images/etc/cloudflare.png" class="tech-logo" alt="Cloudflare"> Cloudflare Workers
+                            </span>
+                            <span class="tech-badge anim-on-scroll fade-in" style="transition-delay: 0.2s;">
+                                <i class="bi bi-database"></i> D1 Database
+                            </span>
+                            <span class="tech-badge anim-on-scroll fade-in" style="transition-delay: 0.3s;">
+                                <i class="bi bi-file-earmark"></i> R2 Storage
+                            </span>
+                            <span class="tech-badge anim-on-scroll fade-in" style="transition-delay: 0.4s;">
+                                <i class="bi bi-code-slash"></i> JavaScript
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action-buttons anim-on-scroll fade-in">
+                    <a href="/playground" class="btn btn-primary">
+                        <i class="bi bi-chat-dots"></i> 채팅 시작
+                    </a>
+                    <a href="/characterinfo" class="btn btn-secondary">
+                        <i class="bi bi-person-lines-fill"></i> 캐릭터 정보
+                    </a>
+                </div>
+
+                <div class="footer-info anim-on-scroll fade-in">
+                    &copy; 2025 세카이 채팅 Project | Powered by 
+                    <img src="/images/etc/Google_icon.png" class="tech-logo-footer" alt="Google"> Google Gemini, 
+                    <img src="/images/etc/cloudflare.png" class="tech-logo-footer" alt="Cloudflare"> Cloudflare Workers
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 sekaich.at</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const scrollElements = document.querySelectorAll(".anim-on-scroll");
+
+            const elementInView = (el, dividend = 1) => {
+                const elementTop = el.getBoundingClientRect().top;
+                return (elementTop <= (window.innerHeight || document.documentElement.clientHeight) / dividend);
+            };
+
+            const displayScrollElement = (element) => {
+                element.classList.add("visible");
+            };
+
+            const handleScrollAnimation = () => {
+                scrollElements.forEach((el) => {
+                    if (elementInView(el, 1.1)) { // Adjusted trigger point
+                        displayScrollElement(el);
+                    }
+                });
+            }
+
+            window.addEventListener("scroll", handleScrollAnimation);
+            handleScrollAnimation(); // Initial check
+        });
+    </script>
+</body>
+
+</html>
+

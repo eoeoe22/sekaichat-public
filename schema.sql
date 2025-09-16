@@ -4,15 +4,14 @@ CREATE TABLE characters (
     nickname TEXT,
     profile_image TEXT NOT NULL,
     system_prompt TEXT NOT NULL,
-    sekai TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
+, sekai TEXT, name_code TEXT, first_name TEXT)
 
 CREATE TABLE conversations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     title TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, is_favorite INTEGER DEFAULT 0, work_mode INTEGER DEFAULT 0, show_time_info INTEGER DEFAULT 1, situation_prompt TEXT DEFAULT '', knowledge_ids TEXT DEFAULT '[]', use_affection_sys INTEGER NOT NULL DEFAULT 0 CHECK (use_affection_sys IN (0, 1)), auto_reply_mode_enabled INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, is_favorite INTEGER DEFAULT 0, work_mode INTEGER DEFAULT 0, show_time_info INTEGER DEFAULT 1, situation_prompt TEXT DEFAULT '', use_affection_sys INTEGER NOT NULL DEFAULT 0 CHECK (use_affection_sys IN (0, 1)), auto_reply_mode_enabled INTEGER DEFAULT 0, use_autorag_memory INTEGER DEFAULT 0 CHECK (use_autorag_memory IN (0, 1)),
 
 CREATE TABLE conversation_participants (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -97,6 +96,7 @@ CREATE TABLE conversation_history_cache (
     FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
 )
 
+/*
 CREATE TABLE knowledge_base (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
@@ -104,6 +104,7 @@ CREATE TABLE knowledge_base (
     keywords TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
+*/
 
 CREATE TABLE user_sekai_preferences (
     user_id INTEGER NOT NULL,

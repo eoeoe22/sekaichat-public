@@ -14,15 +14,17 @@ let showMarkdown = false;
 let imageGenerationEnabled = false;
 // ✅ 추가: 호감도 시스템 상태 (기본 false)
 let affectionSystemEnabled = false;
+// ✅ 추가: AutoRAG 스토리 기억 상태 (기본 false)
+let autoragMemoryEnabled = false;
 let autoReplyModeEnabled = false;
 let awaitingUserMessageResponse = false;
+let proModeEnabled = false;
 let generationAbortController = null;
 
 // 🔧 이미지 생성 쿨다운 관리
 let lastImageGeneration = null;
 const IMAGE_COOLDOWN_SECONDS = 20;
 
-// 🔧 Gemini 오류 안내 시스템 메시지 (대체 텍스트)
 const GEMINI_ERROR_GUIDANCE = `<h4><i class="bi bi-question-circle-fill"></i> 원인</h4>
 <p>메시지 처리 중 오류가 발생하는 주요 원인은 다음과 같습니다.</p>
 
@@ -186,19 +188,21 @@ function setImageGenerationCooldown() {
 
 // 이미지 생성 지원 캐릭터 확인
 function supportsImageGeneration(characterId, characterType) {
-    if (characterType === 'official') {
-        return characterId === 3 || characterId === 8;
-    } else if (characterType === 'user') {
-        return characterId >= 10000;
+    const character = availableCharacters.find(c => c.id === characterId && (c.category === characterType || (c.is_user_character && characterType === 'user') || (!c.is_user_character && characterType === 'official')));
+    if (character) {
+        return character.supports_image_generation;
+    }
+    // If not in availableCharacters, check currentCharacters
+    const currentCharacter = currentCharacters.find(c => c.id === characterId && c.character_type === characterType);
+    if (currentCharacter) {
+        return currentCharacter.supports_image_generation;
     }
     return false;
 }
 
 // 현재 대화에 이미지 생성 지원 캐릭터 있는지
 function hasImageGenerationSupport() {
-    return currentCharacters.some(char =>
-        supportsImageGeneration(char.id, char.type || 'official')
-    );
+    return currentCharacters.some(char => char.supports_image_generation);
 }
 
 // 이미지 생성 UI 업데이트
@@ -245,9 +249,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (window.initializeUserCharacters) {
             try { await window.initializeUserCharacters(); } catch(e){ console.error(e); }
         }
-        if (window.initializeKnowledgeBase) {
-            try { await window.initializeKnowledgeBase(); } catch(e){ console.error(e); }
-        }
+        
 
         // 기존 loadConversations 래핑
         setTimeout(() => {
@@ -302,7 +304,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // HTML 이스케이프 함수
 function escapeHtml(text) {
-    if (!text) return '';
+    if (typeof text !== 'string') return '';
     const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
     return text.replace(/[&<>"']/g, m => map[m]);
 }
@@ -333,7 +335,7 @@ function stripMarkdown(input) {
     text = text.replace(/^ {0,3}>\s?/gm, '');
     text = text.replace(/^ {0,3}([-*+])\s+/gm, '');
     text = text.replace(/^ {0,3}\d+\.\s+/gm, '');
-    text = text.replace(/^ {0,3}(-{3,}|_{3,}|\*{3,})\s*$/gm, '');
+    text = text.replace(/^ {0,3}(-{3,}|_{3,}|\*\*\*)\s*$/gm, '');
     text = text.replace(/^\|.*\|$/gm, line => line.replace(/\|/g, ' ').trim());
     text = text.replace(/^\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+$/gm, '');
     text = text.replace(/\\([\\`*_{}\[\]()#+\-.!>~|])/g, '$1');
@@ -361,7 +363,7 @@ function markdownToHtml(src) {
     text = text.replace(/^ {0,3}## (.*)$/gm, '<h2>$1</h2>');
     text = text.replace(/^ {0,3}# (.*)$/gm, '<h1>$1</h1>');
     text = text.replace(/^ {0,3}>\s?(.*)$/gm, '<blockquote>$1</blockquote>');
-    text = text.replace(/^ {0,3}(-{3,}|_{3,}|\*{3,})\s*$/gm, '<hr>');
+    text = text.replace(/^ {0,3}(-{3,}|_{3,}|\*\*\*)\s*$/gm, '<hr>');
     text = text.replace(/^\|.*\|$/gm, '');
     text = text.replace(/^\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+$/gm, '');
     text = text.replace(/^(\d+)\.\s+(.*)$/gm, '<li data-ol="$1">$2</li>');
@@ -419,6 +421,11 @@ async function checkAuthentication() {
     }
 }
 
+function handleImageGenerationToggle(e) {
+    imageGenerationEnabled = e.target.checked;
+    updateImageGenerationUI();
+}
+
 // 이벤트 리스너 설정
 function setupEventListeners() {
     document.getElementById('sendButton').addEventListener('click', () => sendMessage('user'));
@@ -448,9 +455,13 @@ function setupEventListeners() {
     }
 
     document.getElementById('workModeToggle').addEventListener('change', handleWorkModeToggle);
+    document.getElementById('proModeToggle').addEventListener('change', (e) => {
+        proModeEnabled = e.target.checked;
+    });
     document.getElementById('showTimeToggle').addEventListener('change', handleShowTimeToggle);
     document.getElementById('emojiToggle').addEventListener('change', handleEmojiToggle);
     document.getElementById('imageToggle').addEventListener('change', handleImageToggle);
+    document.getElementById('imageGenerationToggle').addEventListener('change', handleImageGenerationToggle);
 
     document.getElementById('editTitleBtn').addEventListener('click', showEditTitleModal);
     document.getElementById('saveTitleBtn').addEventListener('click', saveConversationTitle);
@@ -459,17 +470,8 @@ function setupEventListeners() {
     document.getElementById('saveSituationBtn').addEventListener('click', saveSituationPrompt);
     document.getElementById('clearSituationBtn').addEventListener('click', clearSituationPrompt);
 
-    const messageInput = document.getElementById('messageInput');
-    messageInput.addEventListener('input', autoResizeTextarea);
-
     const mdToggle = document.getElementById('markdownToggle');
     if (mdToggle) mdToggle.addEventListener('change', e => { showMarkdown = e.target.checked; applyMarkdownMode(); });
-
-    const imgGenToggle = document.getElementById('imageGenerationToggle');
-    if (imgGenToggle) imgGenToggle.addEventListener('change', e => {
-        imageGenerationEnabled = e.target.checked;
-        updateImageGenerationUI();
-    });
 
     const affectionToggle = document.getElementById('affectionToggle');
     if (affectionToggle) affectionToggle.addEventListener('change', handleAffectionToggle);
@@ -477,29 +479,10 @@ function setupEventListeners() {
     const affectionBtn = document.getElementById('affectionBtn');
     if (affectionBtn) affectionBtn.addEventListener('click', showAffectionModal);
 
+    const autoragToggle = document.getElementById('autoragMemoryToggle');
+    if (autoragToggle) autoragToggle.addEventListener('change', handleAutoragMemoryToggle);
+
     document.getElementById('autoReplyToggle').addEventListener('change', handleAutoReplyToggle);
-}
-
-// 텍스트에어리어 자동 크기 조절
-// 텍스트에어리어 자동 크기 조절
-function autoResizeTextarea() {
-    const controls = document.querySelector('.header-controls');
-    const icon = document.querySelector('#headerControlsToggle i');
-    const chatHeader = document.querySelector('.chat-header');
-    const content = document.getElementById('headerControlsContent');
-    const isCollapsed = controls.classList.contains('collapsed');
-
-    if (isCollapsed) {
-        controls.classList.remove('collapsed');
-        content.classList.remove('collapsed');
-        chatHeader.classList.add('expanded');
-        icon.className = 'bi bi-chevron-up';
-    } else {
-        controls.classList.add('collapsed');
-        content.classList.add('collapsed');
-        chatHeader.classList.remove('expanded');
-        icon.className = 'bi bi-chevron-down';
-    }
 }
 
 // 이모지 토글
@@ -514,10 +497,23 @@ function handleImageToggle(e) {
     console.log('이미지 토글 상태:', e.target.checked);
 }
 
-// 작업 모드 토글
 async function handleWorkModeToggle(e) {
     const isWorkMode = e.target.checked;
     currentWorkMode = isWorkMode;
+    const proModeSection = document.getElementById('proModeToggleSection');
+    if (proModeSection) {
+        if (isWorkMode) {
+            proModeSection.style.display = 'block';
+        } else {
+            proModeSection.style.display = 'none';
+            const proModeToggle = document.getElementById('proModeToggle');
+            if (proModeToggle) {
+                proModeToggle.checked = false;
+            }
+            proModeEnabled = false;
+        }
+    }
+
     if (!currentConversationId) return;
     try {
         const response = await fetch(`/api/conversations/${currentConversationId}/work-mode`, {
@@ -525,14 +521,21 @@ async function handleWorkModeToggle(e) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ workMode: isWorkMode })
         });
-        if (response.ok) updateWorkModeUI(isWorkMode);
-        else {
+        if (response.ok) {
+            updateWorkModeUI(isWorkMode);
+        } else {
             e.target.checked = !isWorkMode;
             currentWorkMode = !isWorkMode;
+            if (proModeSection) {
+                proModeSection.style.display = currentWorkMode ? 'block' : 'none';
+            }
         }
     } catch {
         e.target.checked = !isWorkMode;
         currentWorkMode = !isWorkMode;
+        if (proModeSection) {
+            proModeSection.style.display = currentWorkMode ? 'block' : 'none';
+        }
     }
 }
 
@@ -662,6 +665,42 @@ async function handleAffectionToggle(e) {
     }
 }
 
+async function handleAutoragMemoryToggle(e) {
+    const useAutoragMemory = e.target.checked;
+    if (!currentConversationId) {
+        e.target.checked = false;
+        alert('먼저 대화를 시작해주세요.');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/conversations/autorag-memory', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                conversationId: currentConversationId, 
+                useAutoragMemory 
+            })
+        });
+        
+        if (response.ok) {
+            autoragMemoryEnabled = useAutoragMemory;
+            if (useAutoragMemory) {
+                addMessage('system', '스토리 기억 기능이 활성화되었습니다.');
+            } else {
+                addMessage('system', '스토리 기억 기능이 비활성화되었습니다.');
+            }
+        } else {
+            e.target.checked = !useAutoragMemory;
+            alert('스토리 기억 설정 변경에 실패했습니다.');
+        }
+    } catch (error) {
+        console.error('스토리 기억 토글 실패:', error);
+        e.target.checked = !useAutoragMemory;
+        alert('스토리 기억 설정 변경에 실패했습니다.');
+    }
+}
+
 async function handleAutoReplyToggle(e) {
     const isEnabled = e.target.checked;
     autoReplyModeEnabled = isEnabled;
@@ -729,7 +768,7 @@ function updateAffectionModal(data) {
     data.participants.forEach(p => {
         const level = p.affection_level ?? 0;
         const type = p.affection_type || 'friendship';
-        const isNegative = level < 0;
+        const isTypeSelectionDisabled = level < -10;
 
         const characterDiv = document.createElement('div');
         characterDiv.className = 'character-affection-item';
@@ -739,17 +778,26 @@ function updateAffectionModal(data) {
                 <div class="character-affection-name">${escapeHtml(p.name)}</div>
                 <div class="character-affection-level">${getAffectionLevelText(level, type)}</div>
                 <div class="affection-type-group mt-2">
-                    <button class="btn btn-sm ${type === 'friendship' ? 'btn-primary' : 'btn-outline-primary'} ${isNegative ? 'disabled' : ''}" 
+                    <button class="btn btn-sm ${type === 'friendship' ? 'btn-primary' : 'btn-outline-primary'} ${isTypeSelectionDisabled ? 'disabled' : ''}" 
                             onclick="updateAffectionType(this, 'friendship', ${p.character_id}, '${p.character_type}')">우정</button>
-                    <button class="btn btn-sm ${type === 'love' ? 'btn-danger' : 'btn-outline-danger'} ${isNegative ? 'disabled' : ''}" 
+                    <button class="btn btn-sm ${type === 'love' ? 'btn-danger' : 'btn-outline-danger'} ${isTypeSelectionDisabled ? 'disabled' : ''}" 
                             onclick="updateAffectionType(this, 'love', ${p.character_id}, '${p.character_type}')">애정</button>
                 </div>
             </div>
             <div class="affection-controls">
-                <input type="range" class="affection-slider form-range" min="-100" max="100" step="1" value="${level}"
-                       data-character-id="${p.character_id}" data-character-type="${p.character_type}"
-                       oninput="updateAffectionLevel(this, true)" onchange="updateAffectionLevel(this, false)">
-                <div class="affection-value ${getAffectionClass(level)}">${level}</div>
+                <div class="affection-adjust-buttons">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="adjustAffection(${p.character_id}, '${p.character_type}', -5)">-5</button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="adjustAffection(${p.character_id}, '${p.character_type}', -3)">-3</button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="adjustAffection(${p.character_id}, '${p.character_type}', -1)">-1</button>
+                </div>
+                <div class="affection-value-container">
+                    <span class="affection-value ${getAffectionClass(level)}" onclick="enableAffectionInput(this, ${p.character_id}, '${p.character_type}')">${level}</span>
+                </div>
+                <div class="affection-adjust-buttons">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="adjustAffection(${p.character_id}, '${p.character_type}', 1)">+1</button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="adjustAffection(${p.character_id}, '${p.character_type}', 3)">+3</button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="adjustAffection(${p.character_id}, '${p.character_type}', 5)">+5</button>
+                </div>
             </div>
         `;
         characterList.appendChild(characterDiv);
@@ -758,54 +806,95 @@ function updateAffectionModal(data) {
 
 // 호감도 수준 텍스트 반환 (수정됨)
 function getAffectionLevelText(level, type) {
-    if (level < -50) return '적대적';
-    if (level < 0) return '부정적';
-    if (level < 50) return type === 'love' ? '어색함' : '친구';
-    return type === 'love' ? '사랑' : '친한 친구';
+    // 음수 범위 - 3단계
+    if (level < -50) return '최악';
+    if (level < -20) return '부정적';
+    if (level < -10) return '약간 부정적';
+    
+    // 중립 범위 (-10 ~ +10)
+    if (level >= -10 && level <= 10) return '중립';
+    
+    // 양수 범위 - 3단계 (우정/애정 분리 유지)
+    if (level < 30) return type === 'love' ? '약간 호감 (애정)' : '약간 긍정 (우정)';
+    if (level < 70) return type === 'love' ? '긍정적 (애정)' : '긍정적 (우정)';
+    return type === 'love' ? '매우 긍정 (애정)' : '매우 긍정 (우정)';
 }
 
 // 호감도 수준 CSS 클래스 반환 (수정됨)
 function getAffectionClass(level) {
-    if (level < 0) return 'affection-hostile';
-    if (level < 50) return 'affection-neutral';
+    if (level < -10) return 'affection-hostile';
+    if (level >= -10 && level <= 10) return 'affection-neutral';
+    if (level < 70) return 'affection-positive';
     return 'affection-loving';
 }
 
-// 호감도 수준 변경 (수정됨)
-async function updateAffectionLevel(slider, isInput) {
-    const characterId = parseInt(slider.dataset.characterId);
-    const characterType = slider.dataset.characterType;
-    const affectionLevel = parseInt(slider.value);
+// 호감도 버튼으로 조절
+async function adjustAffection(characterId, characterType, amount) {
+    const characterItem = document.querySelector(`[onclick*="adjustAffection(${characterId}, '${characterType}'"]`).closest('.character-affection-item');
+    const valueSpan = characterItem.querySelector('.affection-value');
+    let currentValue = parseInt(valueSpan.textContent);
+    let newValue = currentValue + amount;
+
+    // 값 범위 제한
+    newValue = Math.max(-100, Math.min(100, newValue));
     
-    const item = slider.closest('.character-affection-item');
-    const valueDisplay = item.querySelector('.affection-value');
-    const infoDiv = item.querySelector('.character-affection-level');
-    const typeButtons = item.querySelectorAll('.affection-type-group .btn');
+    await updateAffectionLevel(characterId, characterType, newValue);
+}
 
-    valueDisplay.textContent = affectionLevel;
-    valueDisplay.className = `affection-value ${getAffectionClass(affectionLevel)}`;
-    infoDiv.textContent = getAffectionLevelText(affectionLevel, 'friendship'); // Type은 API 응답 후 갱신
+function enableAffectionInput(span, characterId, characterType) {
+    const currentValue = span.textContent;
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.className = 'affection-input form-control';
+    input.value = currentValue;
+    input.min = -100;
+    input.max = 100;
+    
+    span.style.display = 'none';
+    span.parentNode.insertBefore(input, span.nextSibling);
+    input.focus();
 
-    if (affectionLevel < 0) {
-        typeButtons.forEach(btn => btn.classList.add('disabled'));
-    } else {
-        typeButtons.forEach(btn => btn.classList.remove('disabled'));
-    }
+    const save = async () => {
+        let newValue = parseInt(input.value);
+        if (isNaN(newValue)) {
+            newValue = currentValue;
+        }
+        newValue = Math.max(-100, Math.min(100, newValue));
+        
+        input.remove();
+        span.style.display = '';
+        
+        await updateAffectionLevel(characterId, characterType, newValue);
+    };
 
-    if (isInput) return; // oninput 이벤트는 UI만 업데이트
+    input.addEventListener('blur', save);
+    input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            save();
+        }
+    });
+}
 
+// 호감도 수준 변경 (수정됨)
+async function updateAffectionLevel(characterId, characterType, affectionLevel) {
     try {
         const response = await fetch('/api/affection/adjust', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ conversationId: currentConversationId, characterId, characterType, affectionLevel })
         });
-        if (!response.ok) throw new Error('호감도 조절 실패');
+        if (!response.ok) {
+            const errorData = await response.json();
+            alert(`호감도 조절 실패: ${errorData.error}`);
+            await loadAffectionStatus();
+            return;
+        }
         
-        // 성공 후 상태 다시 로드
+        // 성공 후 상태 다시 로드 (서버 값으로 최종 동기화)
         await loadAffectionStatus();
     } catch (error) {
         console.error('호감도 업데이트 실패:', error);
+        alert('호감도 업데이트 중 오류가 발생했습니다.');
         await loadAffectionStatus(); // 실패 시 원래 값으로 복원
     }
 }
@@ -879,7 +968,6 @@ async function loadUserInfo() {
         if (response.ok) {
             userInfo = await response.json();
             window.userInfo = userInfo;
-            updateModelSelector();
             updateImageUploadButton();
             if (!globalLoadingState.user) {
                 globalLoadingState.user = true;
@@ -923,6 +1011,10 @@ async function loadCharacters() {
 
 // 대화 로드
 async function loadConversation(id) {
+    if (window.matchMedia("(max-width: 992px)").matches) {
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar) sidebar.classList.remove('open');
+    }
     currentConversationId = id;
     awaitingResponse = false;
     autoCallInProgress = false;
@@ -936,12 +1028,14 @@ async function loadConversation(id) {
             let showTimeValue = 1;
             let situationPrompt = '';
             let autoReplyMode = 0;
+            let autoragMemory = 0;
             if (conversationData.messages) {
                 messages = conversationData.messages;
                 workModeValue = conversationData.work_mode || 0;
                 showTimeValue = conversationData.show_time_info !== undefined ? conversationData.show_time_info : 1;
                 situationPrompt = conversationData.situation_prompt || '';
                 autoReplyMode = conversationData.auto_reply_mode_enabled || 0;
+                autoragMemory = conversationData.use_autorag_memory || 0;
             } else if (Array.isArray(conversationData)) {
                 messages = conversationData;
             }
@@ -949,9 +1043,13 @@ async function loadConversation(id) {
             currentShowTime = !!showTimeValue;
             currentSituationPrompt = situationPrompt;
             autoReplyModeEnabled = !!autoReplyMode;
+            autoragMemoryEnabled = !!autoragMemory;
             document.getElementById('workModeToggle').checked = currentWorkMode;
             document.getElementById('showTimeToggle').checked = currentShowTime;
             document.getElementById('autoReplyToggle').checked = autoReplyModeEnabled;
+            
+            const autoragToggle = document.getElementById('autoragMemoryToggle');
+            if (autoragToggle) autoragToggle.checked = autoragMemoryEnabled;
             updateWorkModeUI(currentWorkMode);
             const messagesDiv = document.getElementById('chatMessages');
             messagesDiv.innerHTML = '';
@@ -1044,9 +1142,6 @@ async function sendMessage(role = 'user') {
                     if (temp) temp.remove();
                 }
                 addMessage(role, data.message.content, null, null, 0, data.message.id);
-                if (data.suggestedKnowledge && data.suggestedKnowledge.length > 0 && window.showKnowledgeSuggestion) {
-                    window.showKnowledgeSuggestion(data.suggestedKnowledge);
-                }
                 await triggerAutoReply();
             }
             awaitingResponse = true; // This seems to be for stream, keeping it.
@@ -1085,13 +1180,19 @@ async function generateCharacterResponse(characterId) {
     }
     const loadingBubble = addMessage('assistant', loadingMessage, character?.name, character?.profile_image);
     try {
+        let selectedModel = 'gemini-2.5-flash';
+        if (currentWorkMode && proModeEnabled) {
+            selectedModel = 'gemini-2.5-pro';
+        }
+
         const requestBody = {
             characterId,
             conversationId: currentConversationId,
             workMode: currentWorkMode,
             showTime: currentShowTime,
             situationPrompt: currentSituationPrompt,
-            imageGenerationEnabled
+            imageGenerationEnabled,
+            selectedModel
         };
         if (imageGenerationEnabled) {
             requestBody.imageCooldownSeconds = getRemainingImageCooldown();
@@ -1117,11 +1218,11 @@ async function generateCharacterResponse(characterId) {
             }
             if (data.generatedImages && data.generatedImages.length > 0) {
                 setImageGenerationCooldown();
-                addMessage('system', `🎨 ${data.generatedImages.length}개의 이미지가 생성되었습니다!`);
                 for (const image of data.generatedImages) {
-                    addImageMessage('assistant', `🖼️ "${image.prompt}"`, image.url);
-                    await updateCharacterProfileImage(characterId, image.url);
+                    addImageMessage('assistant', image.filename, image.url, image.id);
                 }
+            } else if (imageGenerationEnabled) {
+                addMessage('system', '이미지 생성에 실패했습니다.');
             }
             awaitingResponse = false;
             if (window.loadConversations) await window.loadConversations();
@@ -1206,6 +1307,11 @@ async function triggerAutoReply() {
             
             // 3. Generate the actual message
             console.log(`[Auto-Reply] Generating message for ${speaker.name}...`);
+            let selectedModel = 'gemini-2.5-flash';
+            if (currentWorkMode && proModeEnabled) {
+                selectedModel = 'gemini-2.5-pro';
+            }
+
             const generationPayload = {
                 characterId: speaker.id,
                 conversationId: currentConversationId,
@@ -1213,7 +1319,8 @@ async function triggerAutoReply() {
                 showTime: currentShowTime,
                 situationPrompt: currentSituationPrompt,
                 imageGenerationEnabled: imageGenerationEnabled,
-                autoCallCount: autoCallCount + 1
+                autoCallCount: autoCallCount + 1,
+                selectedModel
             };
             console.log('[Auto-Reply] Generation payload:', generationPayload);
 
@@ -1249,9 +1356,8 @@ async function triggerAutoReply() {
             
             if (generationData.generatedImages && generationData.generatedImages.length > 0) {
                 setImageGenerationCooldown();
-                addMessage('system', `🎨 ${generationData.generatedImages.length}개의 이미지가 생성되었습니다!`);
+                // Only update character profiles, don't display images (they're now persisted in DB)
                 for (const image of generationData.generatedImages) {
-                    addImageMessage('assistant', `🖼️ "${image.prompt}"`, image.url);
                     await updateCharacterProfileImage(speaker.id, image.url);
                 }
             }
@@ -1361,6 +1467,10 @@ function updateInvitedCharactersUI() {
 
 // 새 대화 시작
 async function startNewConversation() {
+    if (window.matchMedia("(max-width: 992px)").matches) {
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar) sidebar.classList.remove('open');
+    }
     try {
         const response = await fetch('/api/conversations', {
             method: 'POST',
@@ -1382,7 +1492,8 @@ async function startNewConversation() {
             affectionSystemEnabled = false;
             document.getElementById('workModeToggle').checked = false;
             document.getElementById('showTimeToggle').checked = true;
-            document.getElementById('affectionToggle').checked = false;
+            const affectionToggle = document.getElementById('affectionToggle');
+            if (affectionToggle) affectionToggle.checked = false;
             updateWorkModeUI(false);
             updateAffectionUI();
             document.getElementById('chatMessages').innerHTML = '';
@@ -1391,9 +1502,6 @@ async function startNewConversation() {
             if (window.loadConversations) await window.loadConversations();
             applyMarkdownMode();
             updateStartConversationPanel(); // [추가]
-            setTimeout(() => {
-                showSituationPromptModal();
-            }, 350); // [추가]
         } else if (response.status === 401) {
             window.location.href = '/login';
         } else {
@@ -1471,8 +1579,11 @@ function addImageMessage(role, fileName, imageUrl, messageId = null) {
                 ${deleteButtonHtml}
             </div>`;
     } else {
+        const avatarSrc = '/images/characters/ena.webp';
+        const avatarAlt = '에나';
+        
         messageDiv.innerHTML = `
-            <img src="/images/characters/kanade.webp" alt="카나데" class="message-avatar">
+            <img src="${avatarSrc}" alt="${avatarAlt}" class="message-avatar">
             <div class="message-content">
                 <div class="image-message">
                     <img src="${imageUrl}" alt="${escapedFileName}" class="uploaded-image">
@@ -1625,7 +1736,7 @@ function addMessage(role, content, characterName = null, characterImage = null, 
 // 생성된 이미지를 캐릭터 프로필 이미지로 자동 적용
 async function updateCharacterProfileImage(characterId, imageUrl) {
     try {
-        const urlMatch = imageUrl.match(/\/api\/images\/generated\/(.+)$/);
+        const urlMatch = imageUrl.match(/.\/api\/images\/generated\/(.+)$/);
         if (!urlMatch) return false;
         const imageKey = `generated_images/${urlMatch[1]}`;
         const character = currentCharacters.find(c => c.id === characterId) ||
@@ -1678,17 +1789,7 @@ function fileToBase64(file) {
     });
 }
 
-function updateModelSelector() {
-    const modelSelect = document.getElementById('modelSelect');
-    if (!modelSelect) return;
-    const proOption = modelSelect.querySelector('option[value="gemini-2.5-pro"]');
-    if (proOption) {
-        proOption.disabled = !userInfo.has_api_key;
-        if (!userInfo.has_api_key && modelSelect.value === 'gemini-2.5-pro') {
-            modelSelect.value = 'gemini-2.0-flash';
-        }
-    }
-}
+
 
 function updateImageUploadButton() {
     const uploadBtn = document.getElementById('imageUploadBtn');
@@ -1724,4 +1825,5 @@ window.deleteMessage = deleteMessage;
 window.updateInvitedCharactersUI = updateInvitedCharactersUI;
 window.inviteCharacter = inviteCharacter;
 window.updateAffectionLevel = updateAffectionLevel;
+window.adjustAffectionLevel = adjustAffectionLevel; // 전역 노출 추가
 window.updateAffectionType = updateAffectionType; // 전역 노출 추가

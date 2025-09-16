@@ -1,0 +1,1211 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>게스트 모드 - 세카이 채팅</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        /* 게스트 모드 전용 스타일 - Playground 디자인 적용 */
+        
+        /* Header controls styles from playground */
+        .header-controls-toggle {
+            background: none;
+            border: none;
+            color: var(--text-color);
+            font-size: 18px;
+            padding: 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .header-controls-toggle:hover {
+            background-color: var(--hover-color, rgba(0, 0, 0, 0.1));
+        }
+        
+        .header-controls-content {
+            width:100%;
+            gap:18px;
+        }
+        
+        .header-controls-row {
+            display:flex;
+            width:100%;
+            gap:28px;
+            align-items:flex-start;
+            justify-content:flex-end;
+        }
+        
+        .header-controls-row .model-selector-section {
+            flex:0 0 auto;
+            min-width:200px;
+        }
+        
+        .header-controls-row .toggle-controls {
+            flex:0 0 auto;
+            display:flex;
+            flex-wrap:wrap;
+            gap:8px 18px;
+            justify-content:flex-end;
+            align-items:flex-start;
+            max-width:760px;
+        }
+        
+        .header-controls-row .toggle-controls .form-check {
+            min-width:160px;
+        }
+        
+        .situation-prompt-section {
+            display:flex;
+            flex-wrap:wrap;
+            gap:8px;
+            width:100%;
+            justify-content:flex-end;
+            padding-top:15px;
+            border-top:1px solid var(--border-color);
+        }
+        
+        .model-select {
+            min-width: 180px;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 14px;
+            background-color: var(--card-bg);
+            color: var(--text-color);
+            transition: all 0.3s ease;
+        }
+        
+        .model-select:focus {
+            border-color: var(--button-color-solid);
+            box-shadow: 0 0 0 3px rgba(116, 185, 255, 0.1);
+            background-color: var(--card-bg);
+        }
+        
+        .work-mode-info-btn {
+            background: none;
+            border: none;
+            color: var(--button-color-solid);
+            font-size: 14px;
+            margin-left: 4px;
+            cursor: pointer;
+        }
+        
+        /* Chat input styles from playground */
+        .chat-input {
+            background: var(--surface-gradient);
+            padding: 20px;
+            border-top: 1px solid var(--border-color);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(20px);
+            box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.05);
+        }
+
+        .character-management {
+            margin-bottom: 18px;
+            padding: 16px;
+            background: var(--surface-gradient);
+            border-radius: 14px;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        .character-management:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .character-management-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .character-help-text {
+            font-size: 0.8em;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        .invited-characters {
+            display: flex;
+            gap: 5px;
+            margin-top: 10px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+            background: var(--card-bg);
+            border: 2px solid var(--border-color);
+            border-radius: 16px;
+            padding: 12px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        .input-group:focus-within {
+            border-color: var(--button-color-solid);
+            box-shadow: 0 4px 25px rgba(135, 206, 235, 0.15);
+        }
+
+        .chat-input-field {
+            flex: 1;
+            border: none;
+            outline: none;
+            resize: none;
+            background: transparent;
+            color: var(--text-color);
+            font-size: 16px;
+            line-height: 1.5;
+            max-height: 120px;
+            min-height: 24px;
+        }
+
+        .upload-button, .send-button {
+            background: var(--button-color);
+            border: none;
+            border-radius: 10px;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .upload-button:hover, .send-button:hover {
+            background: var(--button-hover-color);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(135, 206, 235, 0.3);
+        }
+
+        .upload-button:disabled, .send-button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .upload-button:disabled:hover, .send-button:disabled:hover {
+            transform: none;
+            box-shadow: none;
+        }
+        
+        /* Sidebar footer styles */
+        .sidebar-footer {
+            margin-top: auto;
+            padding: 1rem 0 0.5rem 0;
+            border-top: 1px solid var(--border-color);
+        }
+        
+        .sidebar-footer-content {
+            text-align: center;
+        }
+        
+        .sidebar-footer-links span {
+            font-weight: 600;
+            color: var(--text-color);
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+        
+        .footer-link-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .footer-link-group a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.8rem;
+            transition: color 0.2s ease;
+        }
+        
+        .footer-link-group a:hover {
+            color: var(--button-color);
+        }
+        
+        .sidebar-footer-copyright {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            opacity: 0.7;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 900px) {
+            .header-controls-row {
+                flex-direction:column;
+                align-items:flex-end;
+            }
+            .header-controls-row .toggle-controls {
+                justify-content:flex-end;
+            }
+            .situation-prompt-section {
+                justify-content:flex-end;
+            }
+        }
+        
+        @media (max-width: 560px) {
+            .header-controls-row .toggle-controls .form-check {
+                min-width:140px;
+            }
+        }
+        
+        /* 배너 스타일 개선 */
+        .guest-banner {
+            background: var(--accent-gradient);
+            color: white;
+            padding: 1.2rem 0;
+            margin-bottom: 0;
+            position: relative;
+            border-radius: 0;
+            animation: slideInFromTop 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        .guest-banner .container-fluid {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+        }
+        
+        .guest-banner-content {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex: 1;
+        }
+        
+        .guest-banner-icon {
+            font-size: 2.2rem;
+            opacity: 0.95;
+            color: #ffd700;
+        }
+        
+        .guest-banner-text h5 {
+            margin: 0;
+            font-weight: 700;
+            font-size: 1.2rem;
+            letter-spacing: -0.02em;
+        }
+        
+        .guest-banner-text p {
+            margin: 0;
+            opacity: 0.9;
+            font-size: 0.95rem;
+            line-height: 1.4;
+        }
+        
+        .guest-banner-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-register-promo {
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            padding: 0.6rem 1.2rem;
+            border-radius: 25px;
+            text-decoration: none;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-weight: 600;
+            font-size: 0.9rem;
+            backdrop-filter: blur(20px);
+            letter-spacing: -0.01em;
+        }
+        
+        .btn-register-promo:hover {
+            background: rgba(255, 255, 255, 0.25);
+            color: white;
+            text-decoration: none;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+        }
+        
+        .btn-close-banner {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            opacity: 0.8;
+            font-size: 1.1rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 0.4rem;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .btn-close-banner:hover {
+            opacity: 1;
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.1);
+        }
+        
+        @keyframes slideInFromTop {
+            from { transform: translateY(-100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        /* 게스트 모드 제한 표시 - Playground 스타일 */
+        .guest-mode-indicator {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            background: var(--surface-gradient);
+            color: var(--text-color);
+            padding: 0.7rem 1.2rem;
+            border-radius: 25px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            z-index: 1000;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            border: 1px solid var(--border-color);
+            letter-spacing: -0.01em;
+        }
+        
+        /* 채팅 컨테이너 조정 - 사이드바와 호환 */
+        .chat-container {
+            background: var(--bg-color);
+            display: flex;
+            height: calc(100vh - 160px); /* 배너 높이 고려 */
+        }
+        
+        /* 게스트 모드 사이드바 특별 스타일 */
+        .guest-info-content {
+            padding: 0.5rem 0;
+        }
+        
+        .guest-info-content .text-muted {
+            margin-bottom: 1rem;
+            font-size: 0.85rem;
+            padding: 0.5rem;
+            background: var(--system-message-bg);
+            border-radius: 8px;
+            border-left: 3px solid var(--button-color);
+        }
+        
+        .auto-reply-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+        }
+        
+        .auto-reply-toggle .form-check-input {
+            width: 1.2em;
+            height: 1.2em;
+        }
+        
+        .auto-reply-toggle .form-check-label {
+            font-weight: 500;
+            color: var(--text-color);
+        }
+        
+        /* 캐릭터 선택 영역 - Playground 스타일 적용 */
+        /* 사이드바용 캐릭터 그리드 스타일 */
+        .character-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 0.8rem;
+            margin: 1rem 0;
+        }
+        
+        /* 캐릭터 카드 - 사이드바 최적화 */
+        .character-card {
+            background: var(--surface-gradient);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 0.8rem 0.6rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        
+        .character-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(116, 185, 255, 0.1), transparent);
+            transition: left 0.6s ease;
+        }
+        
+        .character-card:hover::before {
+            left: 100%;
+        }
+        
+        .character-card:hover {
+            background: var(--surface-gradient);
+            transform: translateY(-2px) scale(1.01);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+            border-color: var(--button-color-solid);
+        }
+        
+        .character-card.selected {
+            border-color: var(--button-color-solid);
+            background: var(--surface-gradient);
+            box-shadow: 0 3px 15px var(--shadow-color);
+        }
+        
+        .character-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin: 0 auto 0.5rem;
+            border: 2px solid transparent;
+            background: var(--accent-gradient);
+            padding: 1px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .character-card:hover .character-avatar {
+            transform: scale(1.05) rotate(3deg);
+            box-shadow: 0 4px 15px var(--shadow-color);
+        }
+        
+        .character-name {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-color);
+            margin: 0;
+            letter-spacing: -0.01em;
+            line-height: 1.2;
+        }
+        
+        /* 선택 완료 버튼 영역 - 사이드바 최적화 */
+        .character-actions {
+            text-align: center;
+            margin-top: 1rem;
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .character-actions .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            letter-spacing: -0.01em;
+            font-size: 0.85rem;
+        }
+        
+        .character-actions .btn-primary {
+            background: var(--button-color);
+            border-color: var(--button-color);
+        }
+        
+        .character-actions .btn-primary:hover {
+            background: var(--button-hover-color);
+            border-color: var(--button-hover-color);
+            transform: translateY(-1px);
+        }
+        }
+        
+        /* 채팅 메시지 영역 개선 */
+        .chat-messages {
+            background: var(--bg-color);
+            padding: 2rem;
+        }
+        
+        .chat-messages .text-center {
+            padding: 3rem 1rem;
+        }
+        
+        .chat-messages .text-center i {
+            color: var(--text-secondary);
+            opacity: 0.6;
+        }
+        
+        .chat-messages .text-center p {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            margin-top: 1rem;
+        }
+        
+        /* 메시지 입력 영역 개선 */
+        .message-input-area {
+            /* This section is now replaced by .chat-input */
+        }
+        
+        /* 모바일 반응형 개선 */
+        @media (max-width: 768px) {
+            .guest-banner .container-fluid {
+                flex-direction: column;
+                align-items: stretch;
+                text-align: center;
+                padding: 0 1rem;
+                gap: 1rem;
+            }
+            
+            .guest-banner-content {
+                justify-content: center;
+                flex-direction: column;
+                gap: 0.8rem;
+            }
+            
+            .guest-banner-text h5 {
+                font-size: 1.1rem;
+            }
+            
+            .guest-banner-text p {
+                font-size: 0.9rem;
+            }
+            
+            /* Sidebar adaptations for mobile */
+            .character-grid {
+                grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+                gap: 0.6rem;
+            }
+            
+            .character-card {
+                padding: 0.6rem 0.4rem;
+            }
+            
+            .character-avatar {
+                width: 35px;
+                height: 35px;
+            }
+            
+            .character-name {
+                font-size: 0.7rem;
+            }
+            
+            .guest-mode-indicator {
+                bottom: 1rem;
+                right: 1rem;
+                font-size: 0.8rem;
+                padding: 0.6rem 1rem;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .guest-banner {
+                padding: 1rem 0;
+            }
+            
+            .guest-banner .container-fluid {
+                padding: 0 0.8rem;
+            }
+            
+            /* More compact character grid for smaller screens */
+            .character-grid {
+                grid-template-columns: repeat(auto-fill, minmax(65px, 1fr));
+                gap: 0.5rem;
+            }
+            
+            .character-card {
+                padding: 0.5rem 0.3rem;
+            }
+            
+            .character-avatar {
+                width: 32px;
+                height: 32px;
+            }
+            
+            .character-name {
+                font-size: 0.65rem;
+            }
+            
+            .guest-mode-indicator {
+                bottom: 0.8rem;
+                right: 0.8rem;
+                font-size: 0.75rem;
+                padding: 0.5rem 0.8rem;
+            }
+        }
+        
+        /* Extra small screens (≤320px) */
+        @media (max-width: 320px) {
+            .guest-banner-text h5 {
+                font-size: 1rem;
+            }
+            
+            .guest-banner-text p {
+                font-size: 0.85rem;
+            }
+            
+            .btn-register-promo {
+                font-size: 0.85rem;
+                padding: 0.5rem 1rem;
+            }
+            
+            /* Ultra-compact character grid */
+            .character-grid {
+                grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+                gap: 0.4rem;
+            }
+            
+            .character-card {
+                padding: 0.4rem 0.2rem;
+            }
+            
+            .character-avatar {
+                width: 28px;
+                height: 28px;
+            }
+            
+            .character-name {
+                font-size: 0.6rem;
+            }
+        }
+        
+        /* 숨김 클래스 */
+        .d-none {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- 게스트 프로모션 배너 -->
+    <div id="guestBanner" class="guest-banner">
+        <div class="container-fluid">
+            <div class="guest-banner-content">
+                <div class="guest-banner-icon">
+                    <i class="bi bi-star-fill"></i>
+                </div>
+                <div class="guest-banner-text">
+                    <h5>세카이 채팅 체험 중</h5>
+                    <p>회원가입하고 모든 기능을 이용해보세요! 대화 저장, 더 많은 캐릭터, 개인 설정 등</p>
+                </div>
+            </div>
+            <div class="guest-banner-actions">
+                <a href="/register" class="btn-register-promo">
+                    <i class="bi bi-person-plus"></i> 회원가입
+                </a>
+                <button class="btn-close-banner" onclick="closeBanner()">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 메인 컨테이너 -->
+    <div class="chat-container">
+        <!-- ===== 사이드바 영역 ===== -->
+        <div id="sidebar" class="sidebar p-3 collapsed">
+            <div class="sidebar-header">
+                <div class="sidebar-title-section">
+                    <h6><img src="/logo.jpg" alt="세카이 채팅" class="sidebar-logo"> 게스트 모드</h6>
+                </div>
+                <button id="sidebarCloseBtn" class="sidebar-close-btn">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            
+            <div class="accordion" id="guestAccordion">
+                <!-- 게스트 정보 섹션 -->
+                <div class="form-section">
+                    <h6><i class="bi bi-person-badge"></i> | 게스트 모드</h6>
+                    <div class="guest-info-content">
+                        <p class="text-muted small">
+                            <i class="bi bi-info-circle"></i>
+                            게스트 모드: 분당 최대 6개 메시지 | 대화내역은 저장되지 않습니다
+                        </p>
+                        <a href="/register" class="btn btn-outline-primary btn-sm w-100 mb-2">
+                            <i class="bi bi-person-plus"></i> 회원가입하기
+                        </a>
+                    </div>
+                </div>
+
+                <!-- 대화내역 섹션 (게스트용) -->
+                <div class="form-section">
+                    <h6><i class="bi bi-card-list"></i> | 대화내역</h6>
+                    <button class="btn btn-secondary w-100 mb-2" disabled>
+                        <i class="bi bi-plus-lg"></i> 새 대화 시작 <small>(회원 전용)</small>
+                    </button>
+                    <div class="conversation-search mb-3">
+                        <div class="input-group">
+                            <input type="text" class="form-control" placeholder="대화 제목 검색 (회원 전용)" disabled>
+                            <button class="btn btn-outline-secondary" type="button" disabled>
+                                <i class="bi bi-x"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="text-muted text-center py-3">
+                        <i class="bi bi-journal-x" style="font-size: 2rem; opacity: 0.5;"></i>
+                        <p class="mt-2">게스트 모드에서는 대화가 저장되지 않습니다.<br>
+                        <small>회원가입하여 대화내역을 저장하세요!</small></p>
+                    </div>
+                </div>
+
+                <!-- 공지사항 섹션 -->
+                <div class="form-section notice-section">
+                    <h6><i class="bi bi-info-circle"></i> | 공지사항</h6>
+                    <p id="noticeContent">게스트 모드를 이용해주셔서 감사합니다!</p>
+                </div>
+
+                <!-- 설정 섹션 -->
+                <div class="form-section">
+                    <h6><i class="bi bi-gear"></i> | 설정</h6>
+                    <button class="btn btn-outline-secondary w-100 mb-2" disabled>
+                        <i class="bi bi-box-arrow-up-right"></i> 설정 페이지 (회원 전용)
+                    </button>
+                </div>
+
+                <!-- 자동응답 모드 섹션 -->
+                <div class="form-section">
+                    <h6><i class="bi bi-robot"></i> | 자동응답 모드</h6>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="autoReplyMode">
+                        <label class="form-check-label" for="autoReplyMode">
+                            자동응답 모드 활성화
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 캐릭터 선택 섹션 -->
+                <div class="form-section">
+                    <h6><i class="bi bi-people-fill"></i> | 캐릭터 선택</h6>
+                    <p class="text-muted small">대화에 참여할 캐릭터를 선택해주세요. 여러 캐릭터를 선택할 수 있습니다.</p>
+                    <div id="characterGrid" class="character-grid">
+                        <!-- 캐릭터들이 동적으로 로드됩니다 -->
+                    </div>
+                    <div class="character-actions">
+                        <button class="btn btn-primary btn-sm" onclick="applyCharacterSelection()">
+                            <i class="bi bi-check-lg"></i> 선택 완료
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <footer class="sidebar-footer">
+                    <div class="sidebar-footer-content">
+                        <div class="sidebar-footer-links">
+                            <span>세카이 채팅</span>
+                            <div class="footer-link-group">
+                                <a href="/characterinfo" target="_blank"><i class="bi bi-person-lines-fill"></i> | 캐릭터 프롬프트</a>
+                                <a href="https://m.dcinside.com/board/pjsekai/2195596" target="_blank"><i class="bi bi-telephone"></i> | 문의/버그제보</a>
+                                <a href="/"><i class="bi bi-info-circle"></i> | 사이트 정보</a>
+                            </div>
+                        </div>
+                        <div class="sidebar-footer-copyright">
+                            <small>&copy; 세카이 채팅</small>
+                        </div>
+                    </div>
+                </footer>
+            </div>
+        </div>
+        
+        <!-- ===== 채팅 메인 ===== -->
+        <div class="chat-main">
+            <div class="chat-header">
+                <div class="profile-section">
+                    <button id="sidebarOpenBtn" class="sidebar-open-btn">
+                        <i class="bi bi-list"></i>
+                    </button>
+                    <div class="profile-info">
+                        <div class="conversation-title-container">
+                            <h5 class="profile-name" id="conversationTitle">게스트 채팅</h5>
+                        </div>
+                    </div>
+                </div>
+                <button id="settingsOpenBtn" class="header-controls-toggle" data-bs-toggle="modal" data-bs-target="#settingsModal">
+                    <i class="bi bi-gear"></i>
+                </button>
+                <div id="headerControlsContent" class="header-controls-content collapsed" style="display: none;">
+                    <div class="header-controls-row">
+                        <div class="model-selector-section">
+                            <label for="modelSelect" class="form-label">
+                                모델:
+                                <button type="button" class="work-mode-info-btn" data-bs-toggle="modal" data-bs-target="#geminiModelInfoModal">
+                                    <i class="bi bi-info-circle"></i>
+                                </button>
+                            </label>
+                            <select id="modelSelect" class="form-select model-select" disabled>
+                                <option value="guest">게스트 전용 모델</option>
+                            </select>
+                            <small class="text-muted">회원가입시 다양한 모델 선택 가능</small>
+                        </div>
+                        <div class="toggle-controls">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="workModeToggle" disabled>
+                                <label class="form-check-label text-muted" for="workModeToggle">
+                                    <button type="button" class="work-mode-info-btn" data-bs-toggle="modal" data-bs-target="#workModeInfoModal">
+                                        <i class="bi bi-info-circle"></i>
+                                    </button>
+                                    작업 모드 <small>(회원가입 필요)</small>
+                                </label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="showTimeToggle" disabled>
+                                <label class="form-check-label text-muted" for="showTimeToggle">시간 정보 제공 <i class="bi bi-clock"></i> <small>(회원가입 필요)</small></label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="emojiToggle" disabled>
+                                <label class="form-check-label text-muted" for="emojiToggle">이모지 표시 <i class="bi bi-chat-heart"></i> <small>(회원가입 필요)</small></label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="imageToggle" disabled>
+                                <label class="form-check-label text-muted" for="imageToggle">챗봇에게 이미지 보여주기 <i class="bi bi-images"></i> <small>(회원가입 필요)</small></label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="markdownToggle" disabled>
+                                <label class="form-check-label text-muted" for="markdownToggle">
+                                    <button type="button" class="work-mode-info-btn" data-bs-toggle="modal" data-bs-target="#markdownInfoModal" title="마크다운 표시 안내">
+                                        <i class="bi bi-info-circle"></i>
+                                    </button>
+                                    마크다운 표시 <small>(회원가입 필요)</small>
+                                </label>
+                            </div>
+                            <div class="form-check form-switch image-toggle-section">
+                                <input class="form-check-input" type="checkbox" id="imageGenerationToggle" disabled>
+                                <label class="form-check-label text-muted" for="imageGenerationToggle">
+                                    <button type="button" class="work-mode-info-btn" data-bs-toggle="modal" data-bs-target="#imageGenerationInfoModal" title="이미지 생성 기능 안내">
+                                        <i class="bi bi-info-circle"></i>
+                                    </button>
+                                    이미지 생성 <i class="bi bi-palette"></i> <small>(회원가입 필요)</small>
+                                </label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="autoragMemoryToggle" disabled>
+                                <label class="form-check-label text-muted" for="autoragMemoryToggle">
+                                    <button type="button" class="work-mode-info-btn" data-bs-toggle="modal" data-bs-target="#autoragMemoryInfoModal" title="스토리 기억 기능 안내">
+                                        <i class="bi bi-info-circle"></i>
+                                    </button>
+                                    스토리 기억 <i class="bi bi-archive"></i> <small>(회원가입 필요)</small>
+                                </label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="affectionToggle" disabled>
+                                <label class="form-check-label text-muted" for="affectionToggle">
+                                    <button type="button" class="work-mode-info-btn" data-bs-toggle="modal" data-bs-target="#affectionInfoModal" title="호감도 시스템 안내">
+                                        <i class="bi bi-info-circle"></i>
+                                    </button>
+                                    호감도 시스템 <i class="bi bi-heart"></i> <small>(회원가입 필요)</small>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="situation-prompt-section">
+                        <button id="situationPromptBtn" class="btn btn-outline-secondary btn-sm" disabled>
+                            <i class="bi bi-card-text"></i> 상황 설정 <small>(회원가입 필요)</small>
+                        </button>
+                        <button id="knowledgeBtn" class="btn btn-outline-secondary btn-sm" disabled>
+                            <i class="bi bi-database"></i> 지식 <small>(회원가입 필요)</small>
+                        </button>
+                        <button id="affectionBtn" class="btn btn-outline-secondary btn-sm" disabled>
+                            <i class="bi bi-heart-fill"></i> 호감도 조절 <small>(회원가입 필요)</small>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 채팅 메시지 영역 -->
+            <div id="chatMessages" class="chat-messages">
+                <div class="text-center text-muted mt-5">
+                    <i class="bi bi-chat-text" style="font-size: 3rem; opacity: 0.5;"></i>
+                    <p class="mt-3">캐릭터를 선택하고 대화를 시작해보세요!</p>
+                </div>
+            </div>
+
+            <div class="chat-input">
+                <div class="character-management">
+                    <div class="character-management-header">
+                        <button id="inviteCharacterBtn" class="btn btn-outline-primary btn-sm" disabled>
+                            <i class="bi bi-person-plus"></i> 캐릭터 초대 <small>(회원 전용)</small>
+                        </button>
+                        <span class="character-help-text">게스트 모드: 사이드바에서 캐릭터 선택</span>
+                    </div>
+                    <div id="invitedCharacters" class="invited-characters"></div>
+                </div>
+                <div class="input-group">
+                    <input type="file" id="imageInput" accept="image/*" style="display:none;" disabled>
+                    <button id="imageUploadBtn" class="upload-button" title="이미지 업로드 (회원가입 필요)" disabled>
+                        <i class="bi bi-image"></i>
+                    </button>
+                    <textarea id="messageInput" class="chat-input-field" placeholder="메시지를 입력하세요... (Enter: 전송, Shift+Enter: 줄바꿈)" rows="1" disabled></textarea>
+                    <button id="situationButton" class="send-button" title="상황 메시지 전송 (회원가입 필요)" disabled><i class="bi bi-card-text"></i></button>
+                    <button id="sendButton" class="send-button" onclick="sendMessage()" disabled><i class="bi bi-send-fill"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 게스트 모드 표시기 -->
+    <div class="guest-mode-indicator">
+        <i class="bi bi-person-badge"></i> 게스트
+    </div>
+
+    <!-- 로딩 오버레이 -->
+    <div id="loadingOverlay" class="d-none" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(5px);">
+        <div class="text-center text-white">
+            <div class="spinner-border" role="status" style="width: 3rem; height: 3rem; color: var(--button-color);">
+                <span class="visually-hidden">로딩 중...</span>
+            </div>
+            <p class="mt-3" style="font-weight: 500; font-size: 1rem;">응답을 생성하는 중...</p>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal fade" id="settingsModal" tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="settingsModalLabel"><i class="bi bi-gear-fill"></i> 대화 설정 (게스트 모드)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <h6><i class="bi bi-info-circle"></i> 게스트 모드 제한사항</h6>
+                        <ul class="mb-0">
+                            <li>분당 최대 6개 메시지</li>
+                            <li>프로젝트 세카이 캐릭터만 이용 가능</li>
+                            <li>대화내역 저장 불가</li>
+                            <li>고급 설정 및 기능 제한</li>
+                        </ul>
+                        <hr>
+                        <p class="mb-0"><strong>회원가입하고 모든 기능을 이용해보세요!</strong></p>
+                        <a href="/register" class="btn btn-primary btn-sm mt-2">
+                            <i class="bi bi-person-plus"></i> 회원가입하러 가기
+                        </a>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Work Mode Info Modal -->
+    <div class="modal fade" id="workModeInfoModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-gear-fill"></i> 작업 모드란?</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="work-mode-explanation">
+                    <h6><i class="bi bi-chat-heart"></i> 몰입 모드 (기본)</h6>
+                    <p>캐릭터의 세계관과 성격에 충실한 대화입니다. 캐릭터들이 자신의 설정을 최대한 준수하며 대화를 나눕니다.</p>
+                    <hr>
+                    <h6><i class="bi bi-gear-fill"></i> 작업 모드</h6>
+                    <p>실용적이며 정보 제공 중심의 대화입니다. 캐릭터의 말투는 유지하되, 실질적인 도움을 제공하는 데 집중합니다.</p>
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <strong>게스트 모드에서는 작업 모드를 사용할 수 없습니다.</strong><br>
+                        회원가입하여 모든 기능을 이용해보세요!
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">확인</button>
+            </div>
+        </div></div>
+    </div>
+
+    <!-- Gemini Model Info Modal -->
+    <div class="modal fade" id="geminiModelInfoModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-cpu"></i> Gemini 모델 정보</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="model-explanation">
+                    <div class="alert alert-info">
+                        <h6><i class="bi bi-person-badge"></i> 게스트 모드</h6>
+                        <p>게스트 모드에서는 전용 모델을 사용합니다. 빠르고 안정적인 응답을 제공합니다.</p>
+                    </div>
+                    <hr>
+                    <h6><i class="bi bi-lightning-charge-fill"></i> 회원 전용 모델</h6>
+                    <ul>
+                        <li><strong>Gemini 2.5 Flash</strong> - 균형 잡힌 성능과 속도</li>
+                        <li><strong>Gemini 2.5 Pro</strong> - 최고 성능, 복잡한 작업에 최적</li>
+                        <li><strong>Gemini 2.0 Flash</strong> - 안정적인 성능</li>
+                    </ul>
+                    <div class="alert alert-success">
+                        <i class="bi bi-star"></i>
+                        <strong>회원가입하고 다양한 AI 모델을 사용해보세요!</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">확인</button>
+            </div>
+        </div></div>
+    </div>
+
+    <!-- Markdown Info Modal -->
+    <div class="modal fade" id="markdownInfoModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-markdown"></i> 마크다운 표시 안내</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
+            </div>
+            <div class="modal-body">
+                <p>"마크다운 표시"를 켜면 메시지의 마크다운 문법(굵게/기울임/코드/링크/리스트/헤딩/인용 등)이 렌더링됩니다.</p>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>게스트 모드에서는 마크다운 표시 기능을 사용할 수 없습니다.</strong><br>
+                    회원가입하여 고급 기능을 이용해보세요!
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" data-bs-dismiss="modal">확인</button>
+            </div>
+        </div></div>
+    </div>
+
+    <!-- Image Generation Info Modal -->
+    <div class="modal fade" id="imageGenerationInfoModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-palette"></i> 이미지 생성 기능 안내</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>FLUX.1 이미지 생성 기능:</strong></p>
+                <ul>
+                    <li>AI가 텍스트 설명을 바탕으로 이미지를 생성합니다</li>
+                    <li>다양한 스타일과 주제의 이미지 제작 가능</li>
+                    <li>고품질 400×400 해상도</li>
+                </ul>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>게스트 모드에서는 이미지 생성 기능을 사용할 수 없습니다.</strong><br>
+                    회원가입하여 창의적인 이미지 생성을 경험해보세요!
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">확인</button>
+            </div>
+        </div></div>
+    </div>
+
+    <!-- AutoRAG Memory Info Modal -->
+    <div class="modal fade" id="autoragMemoryInfoModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-archive"></i> 스토리 기억 기능 안내</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>AutoRAG 스토리 기억 기능:</strong></p>
+                <ul>
+                    <li>최근 대화 5개 메시지를 분석하여 관련된 스토리 맥락을 제공합니다</li>
+                    <li>캐릭터가 이전 대화 내용과 연관된 스토리를 더 잘 기억하고 활용할 수 있습니다</li>
+                    <li>Cloudflare AutoRAG를 사용하여 데이터베이스와 별개로 스토리 데이터를 검색합니다</li>
+                    <li>대화의 맥락과 연속성을 향상시켜 더 자연스러운 대화가 가능합니다</li>
+                </ul>
+                <p><strong>사용 방법:</strong></p>
+                <ol>
+                    <li>스토리 기억 토글을 활성화하세요</li>
+                    <li>평소처럼 캐릭터와 대화하면 자동으로 관련 스토리가 검색됩니다</li>
+                    <li>캐릭터 응답에 이전 대화의 맥락이 반영됩니다</li>
+                </ol>
+                <div class="alert alert-info mt-3">
+                    <i class="bi bi-lightbulb"></i>
+                    <strong>참고사항:</strong> 이 기능은 최근 5개 메시지를 기반으로 관련 스토리를 자동 검색하므로, 대화가 길어질수록 더 풍부한 맥락이 제공됩니다.
+                </div>
+                <p class="text-muted mt-3"><small>이 기능을 사용하려면 회원가입이 필요합니다.</small></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" data-bs-dismiss="modal">확인</button>
+            </div>
+        </div></div>
+    </div>
+
+    <!-- Affection Info Modal -->
+    <div class="modal fade" id="affectionInfoModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-heart-fill"></i> 호감도 시스템 안내</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>호감도 시스템:</strong></p>
+                <ul>
+                    <li>대화 내용에 따라 캐릭터의 호감도가 자동으로 변화</li>
+                    <li>호감도 범위: -100 ~ +100</li>
+                    <li>호감도에 따른 캐릭터 대화 스타일 변화</li>
+                    <li>수동 호감도 조절 가능</li>
+                </ul>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>게스트 모드에서는 호감도 시스템을 사용할 수 없습니다.</strong><br>
+                    회원가입하여 더욱 깊이 있는 캐릭터 관계를 경험해보세요!
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">확인</button>
+            </div>
+        </div></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/js/guest.js"></script>
+    
+    <!-- Guest mode specific scripts -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize header controls toggle
+            const settingsOpenBtn = document.getElementById('settingsOpenBtn');
+            const headerControlsContent = document.getElementById('headerControlsContent');
+            
+            if (settingsOpenBtn && headerControlsContent) {
+                settingsOpenBtn.addEventListener('click', function(e) {
+                    // Just show the modal instead of toggling content for guest mode
+                    e.preventDefault();
+                });
+            }
+            
+            // Enable message input after character selection
+            function enableInputIfCharacterSelected() {
+                const selectedCharacters = document.querySelectorAll('.character-card.selected');
+                const messageInput = document.getElementById('messageInput');
+                const sendButton = document.getElementById('sendButton');
+                
+                if (selectedCharacters.length > 0) {
+                    messageInput.disabled = false;
+                    sendButton.disabled = false;
+                    messageInput.placeholder = "메시지를 입력하세요... (Enter: 전송, Shift+Enter: 줄바꿈)";
+                } else {
+                    messageInput.disabled = true;
+                    sendButton.disabled = true;
+                    messageInput.placeholder = "먼저 캐릭터를 선택해주세요...";
+                }
+            }
+            
+            // Monitor character selection changes
+            const characterGrid = document.getElementById('characterGrid');
+            if (characterGrid) {
+                characterGrid.addEventListener('click', function() {
+                    setTimeout(enableInputIfCharacterSelected, 100);
+                });
+            }
+            
+            // Initial check
+            enableInputIfCharacterSelected();
+        });
+    </script>
+</body>
+</html>

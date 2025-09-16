@@ -104,7 +104,7 @@ export const handleConversations = {
       
       // 대화방 소유권 확인
       const conversation = await env.DB.prepare(
-        'SELECT work_mode FROM conversations WHERE id = ? AND user_id = ?'
+        'SELECT * FROM conversations WHERE id = ? AND user_id = ?'
       ).bind(conversationId, user.id).first();
       
       if (!conversation) {
@@ -136,7 +136,11 @@ export const handleConversations = {
       
       return new Response(JSON.stringify({
         messages: results || [],
-        work_mode: conversation.work_mode || 0
+        work_mode: conversation.work_mode || 0,
+        show_time_info: conversation.show_time_info,
+        situation_prompt: conversation.situation_prompt,
+        auto_reply_mode_enabled: conversation.auto_reply_mode_enabled,
+        use_autorag_memory: conversation.use_autorag_memory
       }), {
         headers: { 'Content-Type': 'application/json' }
       });
@@ -299,7 +303,15 @@ export const handleConversationParticipants = {
         ORDER BY cp.created_at ASC
       `).bind(conversationId).all();
       
-      return new Response(JSON.stringify(results), {
+      const allowedIdsString = env.IMAGE_GENERATION_CHARACTERS || '3,8';
+      const allowedIds = new Set(allowedIdsString.split(',').map(id => parseInt(id.trim())));
+
+      const participantsWithFlag = results.map(p => ({
+          ...p,
+          supports_image_generation: p.character_type === 'user' ? true : allowedIds.has(p.id)
+      }));
+      
+      return new Response(JSON.stringify(participantsWithFlag), {
         headers: { 'Content-Type': 'application/json' }
       });
       

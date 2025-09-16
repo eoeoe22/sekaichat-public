@@ -52,3 +52,17 @@ The database is split into two main schemas: one for the core chat application a
 *   `dating_messages`: Stores the messages within each dating sim conversation.
 *   `dating_checkpoints`: Allows for saving and loading the state of a dating sim conversation.
 *   `dating_random_events`: Logs random events that occur during the dating sim.
+
+
+## Important Instruction about gemini api use
+
+Do not use the gemini-1.5 models, as the 1.5 series is outdated.
+Please use the following latest models:
+
+gemini-2.5-pro (the most powerful model)
+
+gemini-2.5-flash (a cost-effective, general-purpose model)
+
+gemini-2.5-flash-lite (a lightweight model for simple, speed-critical tasks)
+
+gemini-2.0-flash (a backup model for less important secondary tasks)

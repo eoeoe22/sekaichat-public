@@ -184,10 +184,15 @@
     <script>
         const logoutButton = document.getElementById('logout-button');
         if (logoutButton) {
-            logoutButton.addEventListener('click', (e) => {
+            logoutButton.addEventListener('click', async (e) => {
                 e.preventDefault();
-                localStorage.removeItem('token');
-                window.location.href = '/login';
+                try {
+                    await fetch('/api/auth/logout', { method: 'POST' });
+                    window.location.href = '/';
+                } catch (error) {
+                    console.error('Logout failed:', error);
+                    alert('로그아웃에 실패했습니다.');
+                }
             });
         }
     </script>

@@ -7,37 +7,44 @@ assets = { directory = "./public" }
 [[d1_databases]]
 binding = "DB"
 database_name = "sekai-chat"
-database_id = "  "
+database_id = ""
 
+# 이건 카나데 1ㄷ1 챗봇에서 마이그레이션 용도
 [[d1_databases]]
 binding = "KANADE_DB"
 database_name = "kanade"
-database_id = "  "
+database_id = "아이디"
 
 [[r2_buckets]]
 binding = "R2"
-bucket_name = "kanade-images"
+bucket_name = "<YOUR_BUCKET_NAME>"
 
 
 
 [ai]
 binding = "AI"
 
-# 로깅
+# 평소엔 안씀
+# 서버 코드 수정시에만 켬
 [observability]
 enabled = true
 head_sampling_rate = 1.0
 
+#게스트 api키는 같은걸로 해도 상관없음
+#게스트 체험페이지에서는별도로 쓰는거
+
 [vars]
-GEMINI_API_KEY = " "
-TURNSTILE_SITE_KEY = " "
-TURNSTILE_SECRET_KEY = " "
-DOMAIN = "sekai-chat.eoe253326.workers.dev"
-JWT_SECRET = "  "
-IMAGE_GENERATION_CHARACTERS = "3,8"
-DISCORD_CLIENT_ID = " "
-DISCORD_CLIENT_SECRET = " "
-DISCORD_REDIRECT_URI = " "
+GEMINI_API_KEY = "우아와왕"
+GUEST_GEMINI_API_KEY = "우아와왕"
+TURNSTILE_SITE_KEY = "아와와왕"
+TURNSTILE_SECRET_KEY = "젭"
+DOMAIN = "주소"
+JWT_SECRET = "아무거나 막ㅇㅇㅇㅇ"
+IMAGE_GENERATION_CHARACTERS = "0,3"
+DISCORD_CLIENT_ID = "디코 로그인/가입 연동"
+DISCORD_CLIENT_SECRET = "        "
+DISCORD_REDIRECT_URI = "https://도메인/auth/discord/callback"
+25FLASH_IMAGE = "true"
 
 IMAGE_GENERATION_PROMPT = """
 이미지 생성 기능 사용법 : 그림을 그려달라는 요청을 받으면, 메시지에 <<여기에 그림에 대한 영어 프롬프트>>형식으로 이미지 생성 명령을 포함합니다. 프롬프트는 반드시 영어로, 구체적이고 상세하게 작성해주세요. 또 특별히 사용자가 스타일을 언급하지 않았다면, 연필 스케치 스타일로 이미지를 생성하세요. 이미지 생성 명령은 외부 시스템에 의해 자동으로 이미지로 변환될것입니다.
@@ -60,10 +67,9 @@ WORK_MODE_PROMPT = """
 """
 
 COMMON_RULES_PROMPT = """
-- 대답 길이는 되도록 3줄 이하로 유지합니다.
+- 대답 길이는 되도록 1~~2줄 이하로 짧게 유지합니다.
 - (매우중요!!) 캐릭터 설정·세계관을 벗어나는 발언 지양합니다(메타발언 금지).
-- 사용자에게 기본적으로 친근하게 반말을 사용하며, '~아', '~야' 또는 닉네임 그대로 호칭등 친근하게 부릅니다. (~님 금지)
-- 대화 내역이 비어있다면 인사부터 합니다.
+- 사용자에게 기본적으로 친근하게 말투을 사용하며, '~아', 또는 닉네임 그대로 호칭등 친근하게 부릅니다. (~님 금지)
 
 
 ★★★ 매우 중요한 규칙 ★★★
@@ -77,10 +83,16 @@ COMMON_RULES_PROMPT = """
 - 실제 응답할 때는 캐릭터 이름 없이 메시지 내용만 출력하세요.
 - 절대로 '캐릭터명 : ' 접두사를 포함하지 마세요.
 
-사용 가능 언어: 한국어/일본어
-
 
 """
+
+
+
+
+
+
+
+
 
 
 

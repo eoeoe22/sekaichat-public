@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>게스트 접근 인증 - 세카이 채팅</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .verify-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 3rem;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+            backdrop-filter: blur(10px);
+        }
+        
+        .logo {
+            margin-bottom: 1.5rem;
+        }
+        
+        .logo-img {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            object-fit: cover;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .title {
+            color: #333;
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+            font-weight: 400;
+        }
+        
+        .description {
+            color: #555;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+        
+        .verification-section {
+            margin: 2rem 0;
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .btn-verify {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 32px;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 50px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 1rem;
+        }
+        
+        .btn-verify:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            color: white;
+            text-decoration: none;
+        }
+        
+        .btn-verify:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn-back {
+            background: transparent;
+            color: #666;
+            border: 2px solid #ddd;
+            padding: 10px 24px;
+            font-size: 0.9rem;
+            border-radius: 50px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            margin-right: 1rem;
+        }
+        
+        .btn-back:hover {
+            background: #f8f9fa;
+            color: #333;
+            border-color: #ccc;
+            text-decoration: none;
+        }
+        
+        .feature-list {
+            text-align: left;
+            margin: 1.5rem 0;
+        }
+        
+        .feature-list li {
+            margin-bottom: 0.5rem;
+            color: #555;
+        }
+        
+        .feature-list .bi {
+            color: #667eea;
+            margin-right: 0.5rem;
+        }
+        
+        .alert-info {
+            background: rgba(102, 126, 234, 0.1);
+            border: 1px solid rgba(102, 126, 234, 0.3);
+            border-radius: 10px;
+            color: #667eea;
+        }
+        
+        @media (max-width: 768px) {
+            .verify-card {
+                padding: 2rem;
+                margin: 1rem;
+            }
+            .title {
+                font-size: 1.8rem;
+            }
+            .verification-section {
+                padding: 1.5rem;
+                overflow-x: auto;
+            }
+            .cf-turnstile {
+                transform-origin: 0 0;
+                width: 100%;
+                max-width: 300px;
+                margin: 0 auto;
+            }
+            /* Force Turnstile to scale down on very small screens */
+            .cf-turnstile > div {
+                max-width: 100% !important;
+                transform: scale(0.85);
+                transform-origin: 0 0;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .verify-card {
+                padding: 1.5rem;
+                margin: 0.5rem;
+                width: 95%;
+            }
+            .verification-section {
+                padding: 1rem;
+            }
+            .cf-turnstile > div {
+                transform: scale(0.75);
+            }
+            .btn-verify, .btn-back {
+                font-size: 0.9rem;
+                padding: 10px 20px;
+            }
+        }
+        
+        /* 다크모드 지원 */
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: linear-gradient(135deg, #22272e 0%, #1c1f24 100%);
+            }
+            .verify-card {
+                background: rgba(44, 47, 54, 0.95);
+                color: #ddd;
+                box-shadow: 0 20px 40px rgba(0,0,0,0.7);
+            }
+            .title {
+                color: #e0e0e0;
+            }
+            .subtitle, .description, .feature-list li {
+                color: #bbb;
+            }
+            .verification-section {
+                background: rgba(255, 255, 255, 0.05);
+                border-color: rgba(255, 255, 255, 0.1);
+            }
+            .btn-back {
+                color: #bbb;
+                border-color: #444;
+            }
+            .btn-back:hover {
+                background: rgba(255, 255, 255, 0.1);
+                color: #ddd;
+                border-color: #666;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="verify-card">
+        <div class="logo">
+            <img src="/logo.jpg" alt="세카이 채팅 로고" class="logo-img">
+        </div>
+        <h1 class="title">게스트 체험</h1>
+        <p class="subtitle">세카이 채팅 게스트 모드 접근</p>
+        
+        <div class="description">
+            게스트 모드에서는 회원가입 없이 세카이 채팅의 핵심 기능을 체험할 수 있습니다.
+        </div>
+        
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle-fill"></i>
+            <strong>게스트 모드 특징:</strong>
+            <ul class="feature-list">
+                <li><i class="bi bi-check-circle-fill"></i> 프로젝트 세카이 캐릭터와 대화</li>
+                <li><i class="bi bi-check-circle-fill"></i> 자동응답 및 수동 모드 전환</li>
+                <li><i class="bi bi-check-circle-fill"></i> 단일 대화창 제공</li>
+                <li><i class="bi bi-exclamation-triangle-fill"></i> 대화내역 저장 안됨 (페이지를 벗어나면 사라짐)</li>
+                <li><i class="bi bi-clock-fill"></i> 분당 6회 메시지 제한</li>
+            </ul>
+        </div>
+        
+        <div class="verification-section">
+            <p><i class="bi bi-shield-check"></i> 보안 확인을 완료해주세요</p>
+            <form id="verificationForm">
+                <div class="cf-turnstile" data-sitekey="0x4AAAAAABkrf7cd8w3d1nxe" data-callback="onTurnstileSuccess"></div>
+                <br>
+                <button type="submit" id="verifyBtn" class="btn-verify" disabled>
+                    <i class="bi bi-arrow-right-circle"></i> 게스트 모드 시작
+                </button>
+            </form>
+        </div>
+        
+        <div class="mt-4">
+            <a href="/" class="btn-back">
+                <i class="bi bi-arrow-left"></i> 메인으로 돌아가기
+            </a>
+            <a href="/register" class="btn-verify" style="margin-top: 0;">
+                <i class="bi bi-person-plus"></i> 회원가입하기
+            </a>
+        </div>
+    </div>
+
+    <script>
+        let turnstileToken = null;
+        
+        function onTurnstileSuccess(token) {
+            turnstileToken = token;
+            document.getElementById('verifyBtn').disabled = false;
+        }
+        
+        document.getElementById('verificationForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            if (!turnstileToken) {
+                alert('보안 확인을 완료해주세요.');
+                return;
+            }
+            
+            const verifyBtn = document.getElementById('verifyBtn');
+            verifyBtn.disabled = true;
+            verifyBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> 확인 중...';
+            
+            try {
+                const formData = new FormData();
+                formData.append('cf-turnstile-response', turnstileToken);
+                
+                const response = await fetch('/api/guest/verify', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    window.location.href = '/guest';
+                } else {
+                    alert('인증에 실패했습니다. 다시 시도해주세요.');
+                    verifyBtn.disabled = false;
+                    verifyBtn.innerHTML = '<i class="bi bi-arrow-right-circle"></i> 게스트 모드 시작';
+                    turnstile.reset();
+                    turnstileToken = null;
+                }
+            } catch (error) {
+                console.error('Verification error:', error);
+                alert('인증 중 오류가 발생했습니다.');
+                verifyBtn.disabled = false;
+                verifyBtn.innerHTML = '<i class="bi bi-arrow-right-circle"></i> 게스트 모드 시작';
+            }
+        });
+    </script>
+</body>
+</html>

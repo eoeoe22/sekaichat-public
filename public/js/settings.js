@@ -11,11 +11,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const deleteApiKeyBtn = document.getElementById('deleteApiKeyBtn');
     const migrationContainer = document.getElementById('migrationContainer');
     const unlinkDiscordBtn = document.getElementById('unlinkDiscordBtn');
-    const profileImageInput = document.getElementById('profileImageInput');
-    const deleteProfileImageBtn = document.getElementById('deleteProfileImageBtn');
-    const saveProfileImageSettingsBtn = document.getElementById('saveProfileImageSettingsBtn');
-    const profileImagePreview = document.getElementById('profileImagePreview');
-    const profileImageVisible = document.getElementById('profileImageVisible');
     const sekaiFilterContainer = document.getElementById('sekaiFilterContainer');
     const saveSekaiSettingsBtn = document.getElementById('saveSekaiSettingsBtn');
 
@@ -57,9 +52,6 @@ document.addEventListener('DOMContentLoaded', () => {
         apiKeyForm.addEventListener('submit', manageApiKey);
         deleteApiKeyBtn.addEventListener('click', deleteApiKey);
         unlinkDiscordBtn.addEventListener('click', unlinkDiscord);
-        profileImageInput.addEventListener('change', previewProfileImage);
-        deleteProfileImageBtn.addEventListener('click', deleteProfileImage);
-        saveProfileImageSettingsBtn.addEventListener('click', saveProfileImageSettings);
         saveSekaiSettingsBtn.addEventListener('click', saveSekaiPreferences);
         
         // 내 캐릭터 관련 이벤트는 user-characters.js에서 처리
@@ -76,8 +68,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // 프로필
         document.getElementById('new_nickname').placeholder = `현재 닉네임: ${userInfo.nickname}`;
         document.getElementById('selfIntroInput').value = userInfo.self_introduction || '';
-        profileImagePreview.src = userInfo.profile_image ? `/r2/${userInfo.profile_image}` : '/images/characters/default.webp';
-        profileImageVisible.checked = userInfo.profile_image_visible;
 
         // 채팅 설정
         document.getElementById('maxAutoCall').value = userInfo.max_auto_call_sequence || 3;
@@ -261,65 +251,6 @@ document.addEventListener('DOMContentLoaded', () => {
             updateUI();
         } catch (error) {
             alert(`Discord 연동 해제 실패: ${error.message}`);
-        }
-    }
-
-    function previewProfileImage() {
-        const file = profileImageInput.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                profileImagePreview.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
-        }
-    }
-
-    async function deleteProfileImage() {
-        if (!confirm('프로필 이미지를 삭제하시겠습니까?')) return;
-        try {
-            const response = await fetch('/api/user/profile-image', { method: 'DELETE' });
-            if (!response.ok) {
-                throw new Error(await response.text());
-            }
-            alert('프로필 이미지가 삭제되었습니다.');
-            await loadUserInfo();
-            updateUI();
-        } catch (error) {
-            alert(`프로필 이미지 삭제 실패: ${error.message}`);
-        }
-    }
-
-    async function saveProfileImageSettings() {
-        const formData = new FormData();
-        const file = profileImageInput.files[0];
-
-        if (file) {
-            if (file.size > 2 * 1024 * 1024) { // 2MB
-                alert('이미지 파일은 2MB를 초과할 수 없습니다.');
-                return;
-            }
-            formData.append('profileImage', file);
-        }
-
-        formData.append('visible', profileImageVisible.checked);
-
-        try {
-            const response = await fetch('/api/user/profile-image', {
-                method: 'POST',
-                body: formData
-            });
-
-            if (!response.ok) {
-                throw new Error(await response.text());
-            }
-
-            alert('프로필 이미지 설정이 저장되었습니다.');
-            await loadUserInfo();
-            updateUI();
-            profileImageInput.value = ''; // 파일 입력 초기화
-        } catch (error) {
-            alert(`저장 실패: ${error.message}`);
         }
     }
 

@@ -26,12 +26,24 @@ async function getUserFromToken(request, env) {
 
 // 호감도 범위별 행동지침 반환 (수정됨)
 function getAffectionPrompt(level, type) {
+    // 음수 범위 - 3단계
     if (level < -50) return "상대를 매우 싫어하며, 적대적이고 공격적인 태도를 보입니다.";
-    if (level < 0) return "상대에게 부정적인 감정이 있으며, 차갑고 비판적인 태도를 보입니다.";
-    if (level < 50) {
-      if (type === 'love') return "아직은 어색하지만, 상대에게 이성적인 호감을 느끼고 조심스럽게 표현합니다.";
-      return "상대와 친구로서 편안함을 느끼며, 친근하고 긍정적인 태도를 보입니다.";
+    if (level < -20) return "상대에게 부정적인 감정이 있으며, 차갑고 비판적인 태도를 보입니다.";
+    if (level < -10) return "상대에게 약간 부정적인 감정이 있으며, 거리감을 두려고 합니다.";
+    
+    // 중립 범위 (-10 ~ +10) - 호감도 프롬프트 없음
+    if (level >= -10 && level <= 10) return "";
+    
+    // 양수 범위 - 3단계 (우정/애정 분리 유지)
+    if (level < 30) {
+      if (type === 'love') return "상대에게 약간의 이성적 호감을 느끼며, 조심스럽게 다가가려고 합니다.";
+      return "상대에게 약간의 호감을 느끼며, 친근하게 대하려고 합니다.";
     }
+    if (level < 70) {
+      if (type === 'love') return "상대에게 확실한 이성적 매력을 느끼며, 애정을 표현하려고 합니다.";
+      return "상대와 친구로서 편안함을 느끼며, 긍정적이고 따뜻한 태도를 보입니다.";
+    }
+    // level >= 70
     if (type === 'love') return "상대를 깊이 사랑하며, 애정 표현을 적극적으로 하고 헌신적인 모습을 보입니다.";
     return "상대와 매우 가까운 친구 사이이며, 깊은 유대감을 느끼고 신뢰를 보입니다.";
 }
@@ -43,6 +55,11 @@ export function generateAffectionPrompt(characterId, affectionLevel, affectionTy
   }
 
   const behaviorGuide = getAffectionPrompt(affectionLevel, affectionType);
+  
+  // 중립 범위(-10 ~ +10)에서는 호감도 프롬프트를 전혀 전달하지 않음
+  if (behaviorGuide === '') {
+    return '';
+  }
 
   let prompt = `
 [호감도 정보]
@@ -81,9 +98,12 @@ ${conversationHistory}
 긍정적인 대화는 +, 부정적인 대화는 -, 중립적인 대화는 0으로 판단하세요.
 `;
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey
+      },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
@@ -223,6 +243,13 @@ export async function adjustAffectionManual(request, env) {
     if (!user) return new Response('Unauthorized', { status: 401 });
 
     const { conversationId, characterId, characterType, affectionLevel } = await request.json();
+
+    if (!Number.isInteger(affectionLevel)) {
+        return new Response(JSON.stringify({ error: '호감도는 정수여야 합니다.' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
 
     const conversation = await env.DB.prepare(
       'SELECT id FROM conversations WHERE id = ? AND user_id = ?'

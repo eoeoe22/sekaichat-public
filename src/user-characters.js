@@ -223,24 +223,28 @@ export async function getExtendedCharacterList(request, env) {
         const userCharsQuery = `
             SELECT uc.id, uc.name, uc.profile_image_r2 as profile_image, uc.sekai, 'my_character' as category
             FROM user_characters uc
-            LEFT JOIN user_sekai_preferences usp ON uc.sekai = usp.sekai AND usp.user_id = ?
-            WHERE uc.user_id = ? AND uc.deleted_at IS NULL AND (uc.sekai IS NULL OR usp.visible IS NULL OR usp.visible = 1)
+            WHERE uc.user_id = ? AND uc.deleted_at IS NULL
             ORDER BY uc.name ASC
         `;
-        const { results } = await env.DB.prepare(userCharsQuery).bind(userId, userId).all();
+        const { results } = await env.DB.prepare(userCharsQuery).bind(userId).all();
         userChars = results;
     }
+    
+    const allowedIdsString = env.IMAGE_GENERATION_CHARACTERS || '3,8';
+    const allowedIds = new Set(allowedIdsString.split(',').map(id => parseInt(id.trim())));
     
     const allCharacters = [
       ...officialChars.map(char => ({
         ...char,
         profile_image: char.profile_image,
-        is_user_character: false
+        is_user_character: false,
+        supports_image_generation: allowedIds.has(char.id)
       })),
       ...userChars.map(char => ({
         ...char,
         profile_image: `/api/user-characters/image/${char.profile_image}`,
-        is_user_character: true
+        is_user_character: true,
+        supports_image_generation: true
       }))
     ];
     

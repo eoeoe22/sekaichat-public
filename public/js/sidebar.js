@@ -46,6 +46,7 @@ function setupSidebarEventListeners() {
         newConvBtn.addEventListener('click', () => {
             if (window.startNewConversation) {
                 window.startNewConversation();
+                closeSidebarOnMobile();
             }
         });
     }
@@ -84,6 +85,11 @@ async function loadNotice() {
     } catch (error) {
         console.error('공지사항 로드 실패:', error);
     }
+    
+    // 성공/실패 관계없이 로딩 완료 신호 (전역 로딩 상태 업데이트)
+    if (window.markNoticeLoaded) {
+        window.markNoticeLoaded();
+    }
 }
 
 // 대화 목록 로드
@@ -99,6 +105,11 @@ async function loadConversations() {
         }
     } catch (error) {
         console.error('대화내역 로드 실패:', error);
+    }
+    
+    // 성공/실패 관계없이 로딩 완료 신호 (전역 로딩 상태 업데이트)
+    if (window.markConversationsLoaded) {
+        window.markConversationsLoaded();
     }
 }
 
@@ -169,7 +180,7 @@ function displayConversations() {
         const escapedTitle = escapeHTML(cleanTitle);
         
         item.innerHTML = `
-            <div class="conversation-info" onclick="loadConversation(${conv.id})" style="cursor: pointer; flex: 1;">
+            <div class="conversation-info" onclick="loadConversationAndCloseSidebar(${conv.id})" style="cursor: pointer; flex: 1;">
                 <div class="conversation-title" data-conversation-id="${conv.id}" ondblclick="startEditTitle(${conv.id}, event)">${escapedTitle}</div>
                 <input type="text" class="title-edit-input" data-conversation-id="${conv.id}" onblur="saveTitle(${conv.id})" onkeypress="handleTitleKeypress(event, ${conv.id})">
                 <div class="participant-images">${participantImagesHtml}</div>
@@ -389,8 +400,28 @@ async function logout() {
 
 // 유니코드 이모지 제거 함수 (chat.js와 동일)
 function removeUnicodeEmojis(content) {
-    const emojiRegex = /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F900}-\u{1F9FF}]|[\u{1F018}-\u{1F270}]|[\u{1F650}-\u{1F67F}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1F2}-\u{1F1F4}]|[\u{1F1E6}-\u{1F1FF}]|[\u{1F191}-\u{1F19A}]|[\u{1F201}-\u{1F251}]|[\u{1F004}]|[\u{1F0CF}]|[\u{1F170}-\u{1F171}]|[\u{1F17E}-\u{1F17F}]|[\u{1F18E}]|[\u{3030}]|[\u{2B50}]|[\u{2B55}]|[\u{2934}-\u{2935}]|[\u{2B05}-\u{2B07}]|[\u{2B1B}-\u{2B1C}]|[\u{3297}]|[\u{3299}]|[\u{303D}]|[\u{00A9}]|[\u{00AE}]|[\u{2122}]|[\u{23F0}]|[\u{23F3}]|[\u{24C2}]|[\u{26A0}]|[\u{2660}]|[\u{2663}]|[\u{2665}]|[\u{2666}]|[\u{2668}]|[\u{267B}]|[\u{267F}]|[\u{2693}]|[\u{26A1}]|[\u{26AA}-\u{26AB}]|[\u{26BD}-\u{26BE}]|[\u{26C4}-\u{26C5}]|[\u{26CE}]|[\u{26D4}]|[\u{26EA}]|[\u{26F2}-\u{26F3}]|[\u{26F5}]|[\u{26FA}]|[\u{26FD}]|[\u{2702}]|[\u{2705}]|[\u{2708}-\u{2709}]|[\u{270A}-\u{270B}]|[\u{270C}-\u{270D}]|[\u{270F}]|[\u{2712}]|[\u{2714}]|[\u{2716}]|[\u{2728}]|[\u{2733}-\u{2734}]|[\u{2744}]|[\u{2747}]|[\u{274C}]|[\u{274E}]|[\u{2753}-\u{2755}]|[\u{2757}]|[\u{2764}]|[\u{2795}-\u{2797}]|[\u{27A1}]|[\u{27B0}]|[\u{27BF}]|[\u{FE0F}]/gu;
+    const emojiRegex = /[ὠ0}-ὤF]|[ἰ0}-Ὗf]|[Ὠ0}-Ὧf]|[἞0}-἟f]|[☀}-⛷]|[✀}-➿]|[ᾐ0}-ᾟf]|[ἁ8}-ἧ0]|[ὥ0}-ὧF]|[Ὠ0}-Ὧf]|[἟2}-἟4]|[἞6}-἟f]|[Ἑ1}-ἙA]|[ἠ1}-ἥ1]|[ἀ4}]|[Ἄff}]|[἗0}-἗1}]|[἗E}-἗F}]|[ἘE}]|[〰}]|[⭐}]|[⭕}]|[⤴}-⤵}]|[⬅}-⬇}]|[⬛}-⬜}]|[㊗}]|[㊙}]|[〽}]|[©}]|[®}]|[™}]|[⏰}]|[⏳}]|[Ⓜ}]|[⚠}]|[♠}]|[♣}]|[♥}]|[♦}]|[♨}]|[♻}]|[♿}]|[⚓}]|[⚡}]|[⚪}-⚫}]|[⚽}-⚾}]|[⛄}-⛅}]|[⛎}]|[⛔}]|[⛪}]|[⛲}-⛳}]|[⛵}]|[⛺}]|[⛽}]|[✂}]|[✅}]|[✈}-✉}]|[✊}-✋}]|[✌}-✍}]|[✏}]|[✒}]|[✔}]|[✖}]|[✨}]|[✳}-✴}]|[❄}]|[❇}]|[❌}]|[❎}]|[❓}-❕}]|[❗}]|[❤}]|[➕}-➗}]|[➡}]|[➰}]|[➿}]|[️]/gu;
     return content.replace(emojiRegex, '');
+}
+
+// --- 추가된 함수 ---
+// 모바일 화면에서 사이드바를 닫는 함수
+function closeSidebarOnMobile() {
+    // Bootstrap 'lg' breakpoint
+    if (window.innerWidth < 992) {
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar) {
+            sidebar.classList.add('collapsed');
+        }
+    }
+}
+
+// 대화 로드와 사이드바 닫기를 함께 처리하는 함수
+function loadConversationAndCloseSidebar(conversationId) {
+    if (window.loadConversation) {
+        window.loadConversation(conversationId);
+    }
+    closeSidebarOnMobile();
 }
 
 // 전역 함수로 내보내기
@@ -402,3 +433,5 @@ window.startEditTitle = startEditTitle;
 window.saveTitle = saveTitle;
 window.handleTitleKeypress = handleTitleKeypress;
 window.deleteConversation = deleteConversation;
+window.closeSidebarOnMobile = closeSidebarOnMobile;
+window.loadConversationAndCloseSidebar = loadConversationAndCloseSidebar;

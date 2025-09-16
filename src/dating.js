@@ -129,6 +129,32 @@ export const handleDating = {
             return new Response('Internal Server Error', { status: 500 });
         }
     },
+
+    async getCharacterMemory(request, env, conversationId) {
+        try {
+            const user = await getUserFromRequest(request, env);
+            if (!user) return new Response('Unauthorized', { status: 401 });
+
+            const conversation = await env.DB.prepare(
+                `SELECT character_id FROM dating_conversations WHERE id = ? AND user_id = ?`
+            ).bind(conversationId, user.id).first();
+
+            if (!conversation) {
+                return new Response('Conversation not found', { status: 404 });
+            }
+
+            const affection = await env.DB.prepare(
+                `SELECT character_memory FROM user_character_affection WHERE user_id = ? AND character_id = ?`
+            ).bind(user.id, conversation.character_id).first();
+
+            return new Response(JSON.stringify({
+                character_memory: affection?.character_memory || '아직 특별한 기억이 없습니다.'
+            }), { headers: { 'Content-Type': 'application/json' } });
+        } catch (error) {
+            await logError(error, env, 'Dating: GetCharacterMemory');
+            return new Response('Internal Server Error', { status: 500 });
+        }
+    },
     
     async handleChat(request, env) {
         try {

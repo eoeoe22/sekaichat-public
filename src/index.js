@@ -13,9 +13,10 @@ import { handleUserCharacters,
          getExtendedCharacterList,
          serveUserCharacterImage }         from './user-characters.js';
 import { handleMigration }                 from './migration.js';
-import { handleKnowledgeBase, handleConversationKnowledge } from './knowledge-base.js';
+
 import { handleDating }                    from './dating.js';
 import { toggleAffectionSystem, adjustAffectionManual, getAffectionStatus, updateAffectionType } from './affection-system.js';
+import { handleGuest }                     from './guest.js';
 import { logError, verifyJwt, generateSalt, hashPassword, verifyPassword, getAuth, getUserFromRequest } from './utils.js';
 
 export default {
@@ -23,10 +24,10 @@ export default {
     try {
       const url = new URL(request.url);
       
-      // Domain redirection: redirect old domain to new domain
-      if (url.hostname === 'sekai-chat.eoe253326.workers.dev') {
+      // 301 Redirect to primary domain if DOMAIN is set and host does not match
+      if (env.DOMAIN && url.hostname !== env.DOMAIN) {
         const newUrl = new URL(request.url);
-        newUrl.hostname = 'sekaich.at';
+        newUrl.hostname = env.DOMAIN;
         return Response.redirect(newUrl.toString(), 301);
       }
       
@@ -84,7 +85,7 @@ async function handleAPI(request, env, path) {
     '/api/migration/kanade-conversations': { GET: handleMigration.getKanadeConversations },
     '/api/migration/start': { POST: handleMigration.startMigration },
     '/api/notice': { GET: getNotice },
-    '/api/knowledge-base': { GET: handleKnowledgeBase.getAll },
+    
     '/api/dating/conversations': { GET: handleDating.getConversations, POST: handleDating.initializeConversation },
     '/api/dating/chat': { POST: handleDating.handleChat },
     '/api/dating/checkpoints': { POST: handleDating.createCheckpoint },
@@ -95,6 +96,11 @@ async function handleAPI(request, env, path) {
     '/api/affection/toggle': { POST: toggleAffectionSystem },
     '/api/affection/adjust': { POST: adjustAffectionManual },
     '/api/affection/type': { POST: updateAffectionType },
+    '/api/conversations/autorag-memory': { POST: toggleAutoragMemory },
+    '/api/guest/verify': { POST: handleGuest.verifyAccess },
+    '/api/guest/characters': { GET: handleGuest.getCharacters },
+    '/api/guest/chat': { POST: handleGuest.chat },
+    '/api/autorag/preview': { POST: handleAutoragPreview },
   };
 
   if (routes[path] && routes[path][method]) {
@@ -162,16 +168,7 @@ async function handleAPI(request, env, path) {
     const conversationId = parseInt(match[1]);
     if (method === 'GET') return handleConversationParticipants.getParticipants(request, env, conversationId);
   }
-  if ((match = path.match(/^\/api\/conversations\/(\d+)\/knowledge\/search$/))) {
-    const conversationId = parseInt(match[1]);
-    if (method === 'POST') return handleKnowledgeBase.searchByKeywords(request, env, conversationId);
-  }
-  if ((match = path.match(/^\/api\/conversations\/(\d+)\/knowledge$/))) {
-    const conversationId = parseInt(match[1]);
-    if (method === 'POST') return handleConversationKnowledge.apply(request, env, conversationId);
-    if (method === 'DELETE') return handleConversationKnowledge.remove(request, env, conversationId);
-    if (method === 'GET') return handleConversationKnowledge.getApplied(request, env, conversationId);
-  }
+  
   if ((match = path.match(/^\/api\/conversations\/(\d+)\/affection$/))) {
     const conversationId = parseInt(match[1]);
     if (method === 'GET') return getAffectionStatus(request, env);
@@ -195,6 +192,10 @@ async function handleAPI(request, env, path) {
   if ((match = path.match(/^\/api\/dating\/conversation\/(\d+)\/messages$/))) {
     const conversationId = parseInt(match[1]);
     if (method === 'GET') return handleDating.getMessages(request, env, conversationId);
+  }
+  if ((match = path.match(/^\/api\/dating\/conversation\/(\d+)\/memory$/))) {
+    const conversationId = parseInt(match[1]);
+    if (method === 'GET') return handleDating.getCharacterMemory(request, env, conversationId);
   }
   if ((match = path.match(/^\/api\/dating\/conversation\/(\d+)\/checkpoints$/))) {
     const conversationId = parseInt(match[1]);
@@ -230,9 +231,18 @@ async function handlePages(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    // 루트 경로는 동적 HTML 생성
+    // 루트 경로는 /index.html로 리다이렉트
     if (path === '/') {
-        return getLandingPage();
+        const newUrl = new URL('/index.html', url.origin);
+        return Response.redirect(newUrl.toString(), 302);
+    }
+    
+    // Guest page access validation
+    if (path === '/guest') {
+        const cookies = request.headers.get('Cookie');
+        if (!cookies || !cookies.includes('guest_session=')) {
+            return Response.redirect(new URL('/guest/verify', url.origin).toString(), 302);
+        }
     }
 
     // "깔끔한 URL"을 실제 .html 파일로 매핑
@@ -243,8 +253,10 @@ async function handlePages(request, env) {
         '/register': '/register.html',
         '/settings': '/settings.html',
         '/characterinfo': '/characterinfo.html',
-        '/about': '/about.html',
         '/dating': '/dating.html',
+        '/guest': '/guest.html',
+        '/guest/verify': '/guest_verify.html',
+        '/autorag': '/autorag.html',
         // '/dating/chat'은 이제 실제 파일이 아니므로 여기서 처리할 필요 없음
     };
     
@@ -252,28 +264,14 @@ async function handlePages(request, env) {
 
     if (pageMap[cleanPath]) {
         const newUrl = new URL(pageMap[cleanPath], url.origin);
-        const newRequest = new Request(newUrl, request);
-        // wrangler.toml의 assets 설정에 따라 env.ASSETS.fetch를 사용해야 합니다.
-        // 하지만 이 바인딩이 없으므로, 정적 에셋 서빙은 Cloudflare의 내장 핸들러에 맡깁니다.
-        // 이 함수는 이제 깔끔한 URL을 실제 파일 URL로 변환하는 역할만 합니다.
-        // 이 코드 블록은 이제 사실상 필요 없지만, 명확성을 위해 남겨둡니다.
-        // 실제로는 아래의 env.ASSETS.fetch(request)가 모든 것을 처리합니다.
+        
+        // Cloudflare Workers가 assets 설정으로 자동으로 정적 파일을 서빙하도록 리다이렉트
+        return Response.redirect(newUrl.toString(), 302);
     }
 
-    try {
-        // wrangler.toml의 `assets` 설정은 `env.ASSETS.fetch`를 통해 접근하는 것이 아니라,
-        // 플랫폼이 요청을 가로채 자동으로 처리합니다.
-        // 따라서 그냥 원본 요청을 플랫폼에 전달하기만 하면 됩니다.
-        // 만약 파일이 존재하지 않으면, 플랫폼은 404를 반환합니다.
-        // 이 방식이 `env.ASSETS`가 undefined인 문제를 해결합니다.
-        return env.ASSETS.fetch(request);
-    } catch (e) {
-        // `env.ASSETS`가 없는 경우를 대비한 폴백
-        if (e.message.includes("env.ASSETS is not an object")) {
-            return new Response("Static assets are not configured correctly.", { status: 500 });
-        }
-        throw e;
-    }
+    // 매핑되지 않은 일반 정적 파일들은 Cloudflare Workers의 자동 에셋 서빙에 위임
+    // assets = { directory = "./public" } 설정으로 자동 처리됨
+    return new Response("Not Found", { status: 404 });
 }
 // --- [수정된 부분 끝] ---
 
@@ -868,7 +866,7 @@ async function getConversationMessages(request, env, conversationId) {
     
     // 대화방 접근 권한 확인 및 설정 정보 조회
     const conversation = await env.DB.prepare(
-      'SELECT work_mode, show_time_info, situation_prompt, auto_reply_mode_enabled FROM conversations WHERE id = ? AND user_id = ?'
+      'SELECT work_mode, show_time_info, situation_prompt, auto_reply_mode_enabled, use_autorag_memory FROM conversations WHERE id = ? AND user_id = ?'
     ).bind(conversationId, user.id).first();
     
     if (!conversation) {
@@ -896,7 +894,8 @@ async function getConversationMessages(request, env, conversationId) {
       work_mode: conversation.work_mode,
       show_time_info: conversation.show_time_info !== undefined ? conversation.show_time_info : 1,
       situation_prompt: conversation.situation_prompt || '',
-      auto_reply_mode_enabled: conversation.auto_reply_mode_enabled || 0
+      auto_reply_mode_enabled: conversation.auto_reply_mode_enabled || 0,
+      use_autorag_memory: conversation.use_autorag_memory || 0
     }), {
       headers: { 'Content-Type': 'application/json' }
     });
@@ -1099,11 +1098,13 @@ async function supportsImageGeneration(characterId, characterType, env) {
 // Workers AI로 이미지 생성
 async function generateImageWithAI(prompt, env) {
   try {
+    const use25Flash = env['25FLASH_IMAGE'] === 'true';
+    
     const response = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
       prompt: prompt,
-      steps: 3,
-      width: 400,
-      height: 400
+      steps: use25Flash ? 3 : 4,
+      width: use25Flash ? 400 : 512,
+      height: use25Flash ? 400 : 512
     });
     return response;
   } catch (error) {
@@ -1231,175 +1232,340 @@ async function serveImage(request, env, fileName) {
 }
 
 
-function getLandingPage() {
-  const html = `
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>세카이 채팅</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css" />
-    <style>
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            transition: background 0.3s ease, color 0.3s ease;
-            color: #333;
-        }
-        .landing-card {
-            background: white;
-            padding: 3rem;
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            text-align: center;
-            max-width: 500px;
-            width: 90%;
-            transition: background 0.3s ease, color 0.3s ease;
-        }
-        .logo {
-            margin-bottom: 1rem;
-        }
-        .logo-img {
-            width: 120px;
-            height: 120px;
-            border-radius: 20px;
-            object-fit: cover;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-        .title {
-            font-size: 2.5rem;
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 1rem;
-            transition: color 0.3s ease;
-        }
-        .description {
-            color: #666;
-            margin-bottom: 2rem;
-            font-size: 1.1rem;
-            line-height: 1.6;
-            transition: color 0.3s ease;
-        }
-        .btn-custom {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border: none;
-            padding: 15px 30px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            margin: 0 10px 10px 0;
-            border-radius: 50px;
-            transition: all 0.3s ease;
-            color: white;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .btn-custom:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-            color: white;
-            text-decoration: none;
-        }
-        .btn-outline-secondary {
-            border: 2px solid #333;
-            color: #333;
-            background: transparent;
-            padding: 12px 24px;
-            font-size: 1rem;
-            font-weight: 500;
-            border-radius: 50px;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .btn-outline-secondary:hover {
-            background-color: #333;
-            color: white;
-            transform: translateY(-2px);
-            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
-            text-decoration: none;
-        }
+async function extractAutoragResults(results, env) {
+  if (!results) {
+    return [];
+  }
 
-        @media (max-width: 768px) {
-            .landing-card {
-                padding: 2rem;
+  let extractedResults = [];
+
+  // Case 1: Results is a simple array of strings (as seen in gemini.js)
+  if (Array.isArray(results) && results.every(item => typeof item === 'string')) {
+    extractedResults = results.map((result, index) => ({
+      source: `검색 결과 ${index + 1}`,
+      text: result,
+      filename: null // No filename info available for simple strings
+    }));
+  }
+  // Case 2: Results is an object with a property containing the array of results
+  // Common keys are 'results', 'data', 'documents', 'passages'
+  else {
+    const potentialResultKeys = ['results', 'data', 'documents', 'passages'];
+    let found = false;
+    
+    for (const key of potentialResultKeys) {
+      if (results[key] && Array.isArray(results[key])) {
+        extractedResults = results[key].map((result, index) => {
+          if (typeof result === 'string') {
+            return { source: `검색 결과 ${index + 1}`, text: result, filename: null };
+          }
+          if (typeof result === 'object' && result !== null) {
+            // Extract filename from various possible metadata locations
+            let filename = result.filename || 
+                         result.metadata?.filename || 
+                         result.metadata?.file || 
+                         result.metadata?.source_file ||
+                         result.source_metadata?.filename ||
+                         result.document_metadata?.filename;
+            
+            // If we have a filename, use it as the source, otherwise fall back to existing logic
+            let source = filename || 
+                        result.source || 
+                        result.metadata?.source || 
+                        `검색 결과 ${index + 1}`;
+            
+            return {
+              source: source,
+              text: result.text || result.content || result.passage || JSON.stringify(result),
+              filename: filename // Include filename as a separate field for frontend use
+            };
+          }
+          return { source: `검색 결과 ${index + 1}`, text: String(result), filename: null };
+        });
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      // Case 3: Results is a single object with text/content
+      if (typeof results === 'object' && (results.text || results.content)) {
+        let filename = results.filename || 
+                      results.metadata?.filename || 
+                      results.metadata?.file || 
+                      results.metadata?.source_file ||
+                      results.source_metadata?.filename ||
+                      results.document_metadata?.filename;
+        
+        extractedResults = [{
+          source: filename || results.source || '검색 결과',
+          text: results.text || results.content,
+          filename: filename
+        }];
+      }
+      // Case 4: Results is a single string
+      else if (typeof results === 'string') {
+        extractedResults = [{
+          source: '검색 결과',
+          text: results,
+          filename: null
+        }];
+      }
+      // Fallback: If the structure is completely unknown, try to convert it to a string
+      else {
+        extractedResults = [{
+          source: '알 수 없는 형식의 결과',
+          text: JSON.stringify(results, null, 2),
+          filename: null
+        }];
+      }
+    }
+  }
+
+  // Now try to enhance the source information by matching with knowledge_base entries
+  if (env && env.DB) {
+    try {
+      const { results: knowledgeEntries } = await env.DB.prepare(
+        'SELECT title, content FROM knowledge_base ORDER BY title ASC'
+      ).all();
+
+      if (knowledgeEntries && knowledgeEntries.length > 0) {
+        extractedResults = extractedResults.map((result, index) => {
+          // If we already have a filename, prioritize it over knowledge base matching
+          if (result.filename) {
+            return result; // Keep the filename as source
+          }
+          
+          // Try to find a matching knowledge base entry by content similarity
+          const matchedEntry = findBestKnowledgeMatch(result.text, knowledgeEntries);
+          
+          if (matchedEntry) {
+            return {
+              ...result,
+              source: matchedEntry.title
+            };
+          }
+          
+          // If no match found and source is generic, keep it but make it more descriptive
+          if (result.source.startsWith('검색 결과')) {
+            return {
+              ...result,
+              source: `문서 ${index + 1}`
+            };
+          }
+          
+          return result;
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to enhance AutoRAG results with knowledge base titles:', error);
+      // Continue with original results if knowledge base lookup fails
+    }
+  }
+
+  return extractedResults;
+}
+
+// Helper function to find the best matching knowledge base entry
+function findBestKnowledgeMatch(resultText, knowledgeEntries) {
+  if (!resultText || !knowledgeEntries || knowledgeEntries.length === 0) {
+    return null;
+  }
+
+  // Normalize text for comparison
+  const normalizedResultText = resultText.toLowerCase().trim();
+  
+  // First, try to find exact substring matches
+  for (const entry of knowledgeEntries) {
+    const normalizedContent = entry.content.toLowerCase();
+    
+    // Check if result text is a substring of the knowledge content
+    if (normalizedContent.includes(normalizedResultText)) {
+      return entry;
+    }
+    
+    // Check if knowledge content is a substring of the result text
+    if (normalizedResultText.includes(normalizedContent)) {
+      return entry;
+    }
+  }
+
+  // If no exact match, try to find the entry with the most word overlap
+  let bestMatch = null;
+  let bestScore = 0;
+  
+  const resultWords = normalizedResultText.split(/\s+/).filter(word => word.length > 2);
+  
+  for (const entry of knowledgeEntries) {
+    const contentWords = entry.content.toLowerCase().split(/\s+/).filter(word => word.length > 2);
+    
+    // Calculate word overlap score
+    let score = 0;
+    for (const word of resultWords) {
+      if (contentWords.some(cWord => cWord.includes(word) || word.includes(cWord))) {
+        score++;
+      }
+    }
+    
+    // Normalize score by result text length
+    const normalizedScore = score / Math.max(resultWords.length, 1);
+    
+    if (normalizedScore > bestScore && normalizedScore > 0.3) { // Minimum threshold
+      bestScore = normalizedScore;
+      bestMatch = entry;
+    }
+  }
+
+  return bestMatch;
+}
+async function handleAutoragPreview(request, env) {
+  try {
+    const { query, mode } = await request.json();
+
+    if (!query) {
+      return new Response('Query is required', { status: 400 });
+    }
+
+    let searchQuery = query;
+    let extractedKeywords = null;
+
+    if (mode === 'ai') {
+      const keywordPrompt = `다음 텍스트의 핵심 키워드를 쉼표로 구분하여 다른 설명 없이 나열해줘:
+
+${query}`;
+      
+      const apiKey = env.GEMINI_API_KEY;
+
+      if (!apiKey) {
+        throw new Error("GEMINI_API_KEY is not configured for unauthenticated AI search.");
+      }
+
+      try {
+        const keywordResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'x-goog-api-key': apiKey
+            },
+            body: JSON.stringify({
+                contents: [{ role: 'user', parts: [{ text: keywordPrompt }] }],
+                generationConfig: { temperature: 0.0, maxOutputTokens: 100 }
+            })
+        });
+
+        if (keywordResponse.ok) {
+            const keywordData = await keywordResponse.json();
+            const keywords = keywordData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+            if (keywords) {
+              searchQuery = keywords;
+              extractedKeywords = keywords;
             }
-            .title {
-                font-size: 2rem;
-            }
+        } else {
+            await logError(new Error(`Keyword extraction failed: ${keywordResponse.status}`), env, 'AutoRAG Preview Keyword Extraction');
         }
+      } catch (keywordError) {
+        // If Gemini API fails (e.g., network issues in local dev), log the error but continue with original query
+        await logError(keywordError, env, 'AutoRAG Preview Keyword Extraction - Network');
+        console.warn('Keyword extraction failed, using original query:', keywordError.message);
+        // searchQuery remains as the original query
+      }
+    }
 
-        /* 다크모드 지원 */
-        @media (prefers-color-scheme: dark) {
-            body {
-                background: linear-gradient(135deg, #22272e 0%, #1c1f24 100%);
-                color: #ddd;
-            }
-            .landing-card {
-                background: #2c2f36;
-                color: #ddd;
-                box-shadow: 0 20px 40px rgba(0,0,0,0.7);
-            }
-            .title {
-                color: #e0e0e0;
-            }
-            .description {
-                color: #bbb;
-            }
-            .btn-custom {
-                background: linear-gradient(135deg, #4a90e2 0%, #336abd 100%);
-                color: #eee;
-            }
-            .btn-custom:hover {
-                background: linear-gradient(135deg, #3565b0 0%, #274a7a 100%);
-                color: #fff;
-                box-shadow: 0 10px 25px rgba(0,0,0,0.8);
-            }
-            .btn-outline-secondary {
-                border-color: #ddd;
-                color: #ddd;
-            }
-            .btn-outline-secondary:hover {
-                background-color: #ddd;
-                color: #222;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="landing-card">
-        <div class="logo">
-            <img src="/logo.jpg" alt="세카이 채팅 로고" class="logo-img">
-        </div>
-        <h1 class="title">세카이 채팅</h1>
-        <p class="description">
-            Google Gemini 기반 다중 캐릭터 챗봇
-        </p>
+    let results;
+    let formattedResults = [];
+    
+    try {
+      results = await env.AI.autorag("sekai").search({
+        query: searchQuery,
+      });
 
-        <div>
-            <a href="/login" class="btn-custom">
-                <i class="bi bi-box-arrow-in-right"></i> 로그인
-            </a>
-            <a href="/register" class="btn-custom">
-                <i class="bi bi-person-plus"></i> 회원가입
-            </a>
-        </div>
+      // Log the actual response structure for debugging
+      console.log('AutoRAG raw response:', JSON.stringify(results, null, 2));
+      console.log('AutoRAG response type:', typeof results, 'isArray:', Array.isArray(results));
 
-        <div class="mt-4">
-            <a href="/about" class="btn-outline-secondary">
-                <i class="bi bi-info-circle"></i> 사이트 정보
-            </a>
-        </div>
-    </div>
-</body>
-</html>
-  `;
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' }
-  });
+      // More robustly transform the response to match frontend expectations
+      formattedResults = await extractAutoragResults(results, env);
+    } catch (autoragError) {
+      // Handle specific AutoRAG errors
+      console.error('AutoRAG service error:', autoragError.message);
+      await logError(autoragError, env, 'AutoRAG Service Call');
+      
+      // Check if this is an authentication error (common in local development)
+      if (autoragError.message && autoragError.message.includes('Not logged in')) {
+        // For authentication errors, return empty results to show "no results" message
+        formattedResults = [];
+      } else {
+        // For other errors, return a helpful message
+        formattedResults = [{
+          source: 'System',
+          text: `AutoRAG 검색 서비스에 일시적인 문제가 발생했습니다. (검색어: "${searchQuery}") 오류: ${autoragError.message}`
+        }];
+      }
+    }
+
+    return new Response(JSON.stringify({
+      results: formattedResults,
+      keywords: extractedKeywords,
+      mode: mode
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+  } catch (error) {
+    await logError(error, env, 'handleAutoragPreview');
+    console.error('AutoRAG Preview Error:', error);
+    
+    // Return a more specific error response
+    return new Response(JSON.stringify({ 
+      error: error.message,
+      results: [],
+      keywords: extractedKeywords || null,
+      mode: mode || 'normal'
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+
+
+// AutoRAG Memory toggle function
+async function toggleAutoragMemory(request, env) {
+  try {
+    const user = await getUserFromRequest(request, env);
+    if (!user) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+    
+    const { conversationId, useAutoragMemory } = await request.json();
+    
+    if (!conversationId) {
+      return new Response('대화 ID가 필요합니다.', { status: 400 });
+    }
+    
+    // 대화방 소유권 확인
+    const conversation = await env.DB.prepare(
+      'SELECT id FROM conversations WHERE id = ? AND user_id = ?'
+    ).bind(conversationId, user.id).first();
+    
+    if (!conversation) {
+      return new Response('대화를 찾을 수 없습니다.', { status: 404 });
+    }
+    
+    // AutoRAG 메모리 설정 업데이트
+    await env.DB.prepare(
+      'UPDATE conversations SET use_autorag_memory = ? WHERE id = ?'
+    ).bind(useAutoragMemory ? 1 : 0, conversationId).run();
+    
+    return new Response(JSON.stringify({ 
+      success: true, 
+      use_autorag_memory: useAutoragMemory ? 1 : 0 
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    await logError(error, env, 'Toggle AutoRAG Memory');
+    return new Response('AutoRAG 메모리 설정 변경에 실패했습니다.', { status: 500 });
+  }
 }

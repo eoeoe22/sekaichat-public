@@ -1,7 +1,7 @@
 업뎃
 
 클라우드플레어 AutoRAG 연동
-autorag 
+autorag 이름은 sekai 로 만들어야됨, 아니면 코드 고치던가
 
 
 Cloudflare Workers, D1, R2환경에서 구동중인 코드.
@@ -19,6 +19,7 @@ Cloudflare Workers, D1, R2환경에서 구동중인 코드.
 ```
 git clone https://github.com/eoeoe22/sekaichat-public
 ```
+
 
 
 

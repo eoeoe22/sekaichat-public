@@ -1,3 +1,7 @@
+업뎃
+클라우드플레어 AutoRAG 연동
+
+
 Cloudflare Workers, D1, R2환경에서 구동중인 코드.
 이 레포지토리의 메인 브랜치를 수정시 자동으로 즉시 Workers에 배포됨
 
@@ -13,6 +17,7 @@ Cloudflare Workers, D1, R2환경에서 구동중인 코드.
 ```
 git clone https://github.com/eoeoe22/sekaichat-public
 ```
+
 
 
 

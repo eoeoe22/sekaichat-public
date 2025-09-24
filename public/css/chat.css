@@ -825,28 +825,86 @@
   font-style: italic;
 }
 
-/* 메시지 삭제 버튼 스타일 */
-.message-delete-wrapper {
-  margin-top: 4px;
-  text-align: right;
+/* 메시지 액션 스타일 (TTS, 삭제 등) */
+.message-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  justify-content: flex-end;
 }
 
-.message-delete-btn {
+.message.user .message-actions {
+  justify-content: flex-start;
+}
+
+/* TTS 버튼 스타일 */
+.tts-button {
   background: transparent !important;
-  border: none !important;
-  padding: 2px !important;
-  color: transparent !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 6px !important;
+  padding: 4px 8px !important;
+  color: var(--text-secondary) !important;
   cursor: pointer;
   font-size: 14px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 28px;
+}
+
+.tts-button:hover {
+  background: var(--button-color-solid) !important;
+  color: white !important;
+  border-color: var(--button-color-solid) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(135, 206, 235, 0.3);
+}
+
+.tts-button:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(135, 206, 235, 0.2);
+}
+
+.tts-button i {
+  font-size: 13px;
+}
+
+/* 메시지 삭제 버튼 스타일 */
+/* 메시지 삭제 버튼 스타일 */
+.message-delete-btn {
+  background: transparent !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 6px !important;
+  padding: 4px 8px !important;
+  color: var(--text-secondary) !important;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 28px;
+}
+
+.message-delete-btn:hover {
+  background: #dc3545 !important;
+  color: white !important;
+  border-color: #dc3545 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+}
+
+.message-delete-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(220, 53, 69, 0.2);
 }
 
 .message-delete-btn i {
-  color: #dc3545 !important;
-  font-size: 14px;
-}
-
-.message-delete-btn:hover i {
-  color: #a71d2a !important;
+  font-size: 13px;
 }
 
 /* 상황 프롬프트 섹션 스타일 */
@@ -861,6 +919,45 @@
 .situation-prompt-section .btn {
     font-size: 13px;
     padding: 6px 12px;
+}
+
+/* TTS 언어 설정 섹션 스타일 */
+.tts-language-section {
+    margin-top: 12px;
+    padding: 10px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tts-language-section .form-label {
+    font-size: 13px;
+    color: var(--text-color);
+    font-weight: 500;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.tts-language-section .btn-group {
+    width: 100%;
+}
+
+.tts-language-section .btn {
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 4px;
+}
+
+.tts-language-section .btn:first-child {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.tts-language-section .btn:last-child {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
 }
 
 #knowledgeBtn {

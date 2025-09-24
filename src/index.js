@@ -17,6 +17,7 @@ import { handleMigration }                 from './migration.js';
 import { handleDating }                    from './dating.js';
 import { toggleAffectionSystem, adjustAffectionManual, getAffectionStatus, updateAffectionType } from './affection-system.js';
 import { handleGuest }                     from './guest.js';
+import { handleTTS, handleTTSTranslation, handleTTSTest, handleTTSDebug }                       from './tts.js';
 import { logError, verifyJwt, generateSalt, hashPassword, verifyPassword, getAuth, getUserFromRequest } from './utils.js';
 
 export default {
@@ -25,7 +26,8 @@ export default {
       const url = new URL(request.url);
       
       // 301 Redirect to primary domain if DOMAIN is set and host does not match
-      if (env.DOMAIN && url.hostname !== env.DOMAIN) {
+      // Skip redirect for localhost development
+      if (env.DOMAIN && url.hostname !== env.DOMAIN && !url.hostname.includes('localhost')) {
         const newUrl = new URL(request.url);
         newUrl.hostname = env.DOMAIN;
         return Response.redirect(newUrl.toString(), 301);
@@ -100,7 +102,12 @@ async function handleAPI(request, env, path) {
     '/api/guest/verify': { POST: handleGuest.verifyAccess },
     '/api/guest/characters': { GET: handleGuest.getCharacters },
     '/api/guest/chat': { POST: handleGuest.chat },
+    '/api/tts': { POST: handleTTS },
+    '/api/tts/translate': { POST: handleTTSTranslation },
+    '/api/tts/test': { POST: handleTTSTest },
+    '/api/tts/debug': { GET: handleTTSDebug },
     '/api/autorag/preview': { POST: handleAutoragPreview },
+    '/api/autorag/status': { GET: handleAutoragStatus },
   };
 
   if (routes[path] && routes[path][method]) {
@@ -431,8 +438,8 @@ async function deleteMessage(request, env, messageId) {
     await env.DB.prepare('DELETE FROM messages WHERE id = ?').bind(messageId).run();
     
     // 대화 캐시 무효화
-    await env.DB.prepare('DELETE FROM conversation_history_cache WHERE conversation_id = ?')
-      .bind(message.conversation_id).run();
+    const cacheKey = `chat_history:${message.conversation_id}`;
+    await env.KV.delete(cacheKey);
     
     return new Response(JSON.stringify({ success: true }), {
       headers: { 'Content-Type': 'application/json' }
@@ -447,7 +454,7 @@ async function deleteMessage(request, env, messageId) {
 async function getCharacterInfo(request, env) {
   try {
     const { results } = await env.DB.prepare(
-      'SELECT id, name, nickname, profile_image, system_prompt FROM characters ORDER BY id ASC'
+      'SELECT id, name, nickname, profile_image, system_prompt, first_name_jp FROM characters ORDER BY id ASC'
     ).all();
     
     return new Response(JSON.stringify(results || []), {
@@ -580,6 +587,16 @@ async function handleUserUpdate(request, env) {
         await env.DB.prepare(
           'UPDATE users SET discord_id = NULL, discord_username = NULL, discord_avatar = NULL WHERE id = ?'
         ).bind(user.id).run();
+        break;
+
+      case 'tts_language_preference':
+        const { tts_language_preference } = data;
+        if (!['kr', 'jp'].includes(tts_language_preference)) {
+          return new Response('잘못된 TTS 언어 설정입니다', { status: 400 });
+        }
+        await env.DB.prepare(
+          'UPDATE users SET tts_language_preference = ? WHERE id = ?'
+        ).bind(tts_language_preference, user.id).run();
         break;
         
       default:
@@ -946,13 +963,11 @@ async function deleteConversation(request, env, conversationId) {
 // 공지사항 조회
 async function getNotice(request, env) {
   try {
-    const result = await env.DB.prepare(
-      'SELECT content FROM notices WHERE id = 1'
-    ).first();
+    const { results } = await env.DB.prepare(
+      'SELECT content FROM notices ORDER BY id DESC'
+    ).all();
     
-    return new Response(JSON.stringify({ 
-      content: result?.content || '공지사항이 없습니다.' 
-    }), {
+    return new Response(JSON.stringify(results || []), {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
@@ -1136,6 +1151,15 @@ async function handleDirectUpload(request, env) {
       return new Response('Forbidden', { status: 403 });
     }
     
+    // 사용자 존재 여부 확인 (Foreign Key 제약조건 오류 방지)
+    const userExists = await env.DB.prepare('SELECT id FROM users WHERE id = ?')
+      .bind(user.id).first();
+    
+    if (!userExists) {
+      await logError(new Error(`User ID ${user.id} from JWT token does not exist in database`), env, 'Handle Direct Upload - User Validation');
+      return new Response('Invalid user session. Please login again.', { status: 401 });
+    }
+    
     const formData = await request.formData();
     const file = formData.get('file');
     const conversationId = formData.get('conversationId');
@@ -1146,6 +1170,16 @@ async function handleDirectUpload(request, env) {
     
     if (!validateUploadFile(file)) {
       return new Response('지원하지 않는 파일 형식이거나 크기가 5MB를 초과합니다.', { status: 400 });
+    }
+    
+    // 대화방 존재 여부 및 소유권 확인 (Foreign Key 제약조건 오류 방지)
+    if (conversationId) {
+      const conversationExists = await env.DB.prepare('SELECT id FROM conversations WHERE id = ? AND user_id = ?')
+        .bind(conversationId, user.id).first();
+      
+      if (!conversationExists) {
+        return new Response('Invalid conversation or access denied', { status: 403 });
+      }
     }
     
     const uniqueFileName = generateUniqueFileName(file.name);
@@ -1165,6 +1199,10 @@ async function handleDirectUpload(request, env) {
       await env.DB.prepare(
         'INSERT INTO messages (conversation_id, role, content, message_type, file_id, user_id) VALUES (?, ?, ?, ?, ?, ?)'
       ).bind(conversationId, 'user', file.name, 'image', fileId, user.id).run();
+      
+      // 대화 캐시 무효화
+      const cacheKey = `chat_history:${conversationId}`;
+      await env.KV.delete(cacheKey);
       
       return new Response(JSON.stringify({
         success: true,
@@ -1420,7 +1458,8 @@ function findBestKnowledgeMatch(resultText, knowledgeEntries) {
 }
 async function handleAutoragPreview(request, env) {
   try {
-    const { query, mode } = await request.json();
+    const { query, mode, server } = await request.json();
+    const autoragProject = server === 'jp' ? 'sekai-jp' : 'sekai';
 
     if (!query) {
       return new Response('Query is required', { status: 400 });
@@ -1475,7 +1514,7 @@ ${query}`;
     let formattedResults = [];
     
     try {
-      results = await env.AI.autorag("sekai").search({
+      results = await env.AI.autorag(autoragProject).search({
         query: searchQuery,
       });
 
@@ -1521,6 +1560,67 @@ ${query}`;
       results: [],
       keywords: extractedKeywords || null,
       mode: mode || 'normal'
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// Get AutoRAG vectorize bucket status
+async function handleAutoragStatus(request, env) {
+  try {
+    const status = {
+      vectorize: {
+        lastModified: null,
+        error: null
+      },
+      vectorize_jp: {
+        lastModified: null,
+        error: null
+      }
+    };
+
+    // Get last modified date from vectorize bucket (Korean server)
+    try {
+      const koreanObjects = await env.AutoRAG1.list({ limit: 1000 });
+      if (koreanObjects.objects && koreanObjects.objects.length > 0) {
+        // Find the most recent upload
+        const mostRecent = koreanObjects.objects.reduce((latest, obj) => {
+          return new Date(obj.uploaded) > new Date(latest.uploaded) ? obj : latest;
+        });
+        status.vectorize.lastModified = mostRecent.uploaded;
+      }
+    } catch (error) {
+      status.vectorize.error = error.message;
+    }
+
+    // Get last modified date from vectorize-jp bucket (Japanese server)
+    try {
+      const japaneseObjects = await env.AutoRAG2.list({ limit: 1000 });
+      if (japaneseObjects.objects && japaneseObjects.objects.length > 0) {
+        // Find the most recent upload
+        const mostRecent = japaneseObjects.objects.reduce((latest, obj) => {
+          return new Date(obj.uploaded) > new Date(latest.uploaded) ? obj : latest;
+        });
+        status.vectorize_jp.lastModified = mostRecent.uploaded;
+      }
+    } catch (error) {
+      status.vectorize_jp.error = error.message;
+    }
+
+    return new Response(JSON.stringify(status), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+  } catch (error) {
+    await logError(error, env, 'handleAutoragStatus');
+    console.error('AutoRAG Status Error:', error);
+    
+    return new Response(JSON.stringify({ 
+      error: error.message,
+      vectorize: { lastModified: null, error: error.message },
+      vectorize_jp: { lastModified: null, error: error.message }
     }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }

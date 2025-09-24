@@ -78,6 +78,15 @@ export const handleConversations = {
         return new Response('으....이....', { status: 401 });
       }
       
+      // 사용자 존재 여부 확인 (Foreign Key 제약조건 오류 방지)
+      const userExists = await env.DB.prepare('SELECT id FROM users WHERE id = ?')
+        .bind(user.id).first();
+      
+      if (!userExists) {
+        await logError(new Error(`User ID ${user.id} from JWT token does not exist in database`), env, 'Conversations Create - User Validation');
+        return new Response('Invalid user session. Please login again.', { status: 401 });
+      }
+      
       const result = await env.DB.prepare(
         'INSERT INTO conversations (user_id, title) VALUES (?, ?)'
       ).bind(user.id, `대화 ${new Date().toLocaleString()}`).run();
@@ -196,61 +205,58 @@ export const handleConversationParticipants = {
         return new Response('Unauthorized', { status: 401 });
       }
       
-      // 대화방 소유권 확인
-      const conversation = await env.DB.prepare(
-        'SELECT id FROM conversations WHERE id = ? AND user_id = ?'
-      ).bind(conversationId, user.id).first();
-      
-      if (!conversation) {
-        return new Response('대화방을 찾을 수 없습니다.', { status: 404 });
-      }
-      
       const { characterId, characterType } = await request.json();
 
-      // 입력값 검증
       if (characterId == null || !characterType) {
         return new Response('캐릭터 정보가 누락되었습니다.', { status: 400 });
       }
       
-      // 캐릭터 존재 여부 확인
-      let characterExists = false;
       let finalCharacterType = '';
-
       if (characterType === 'official') {
-          const officialChar = await env.DB.prepare(
-              'SELECT id FROM characters WHERE id = ?'
-          ).bind(characterId).first();
-          if (officialChar) {
-              characterExists = true;
-              finalCharacterType = 'official';
-          }
+          finalCharacterType = 'official';
       } else if (characterType === 'user' || characterType === 'my_character' || characterType === 'user_created') {
-          const userChar = await env.DB.prepare(
-              'SELECT id FROM user_characters WHERE id = ? AND user_id = ? AND deleted_at IS NULL'
-          ).bind(characterId, user.id).first();
-          if (userChar) {
-              characterExists = true;
-              finalCharacterType = 'user';
+          finalCharacterType = 'user';
+      } else {
+          return new Response(`Invalid characterType: ${characterType}`, { status: 400 });
+      }
+
+      // First, verify the character itself exists to provide a clear error message.
+      if (finalCharacterType === 'official') {
+          const charExists = await env.DB.prepare('SELECT id FROM characters WHERE id = ?').bind(characterId).first();
+          if (!charExists) return new Response('초대할 수 없는 캐릭터입니다 (공식).', { status: 400 });
+      } else { // user
+          const charExists = await env.DB.prepare('SELECT id FROM user_characters WHERE id = ? AND deleted_at IS NULL').bind(characterId).first();
+          if (!charExists) return new Response('초대할 수 없는 캐릭터입니다 (사용자).', { status: 400 });
+      }
+
+      const result = await env.DB.prepare(`
+        INSERT INTO conversation_participants (conversation_id, character_id, character_type)
+        SELECT c.id, ?, ?
+        FROM conversations c
+        WHERE c.id = ? AND c.user_id = ?
+        AND NOT EXISTS (
+          SELECT 1 FROM conversation_participants cp
+          WHERE cp.conversation_id = c.id AND cp.character_id = ? AND cp.character_type = ?
+        )
+      `).bind(
+          characterId, 
+          finalCharacterType, 
+          conversationId, 
+          user.id,
+          characterId,
+          finalCharacterType
+      ).run();
+
+      if (result.meta.changes === 0) {
+          // This could be because the conversation doesn't exist/belong to user, or participant already exists.
+          // Since we check character existence above, we can deduce it's one of the other two.
+          const conversation = await env.DB.prepare('SELECT id FROM conversations WHERE id = ? AND user_id = ?').bind(conversationId, user.id).first();
+          if (!conversation) {
+              return new Response('대화방을 찾을 수 없거나 권한이 없습니다.', { status: 404 });
           }
+          // If conversation exists, the participant must already be there.
+          return new Response('이미 초대된 캐릭터입니다.', { status: 400 });
       }
-      
-      if (!characterExists) {
-        return new Response('초대할 수 없는 캐릭터입니다.', { status: 400 });
-      }
-      
-      // 이미 초대된 캐릭터인지 확인
-      const existingParticipant = await env.DB.prepare(
-        'SELECT id FROM conversation_participants WHERE conversation_id = ? AND character_id = ? AND character_type = ?'
-      ).bind(conversationId, characterId, finalCharacterType).first();
-      
-      if (existingParticipant) {
-        return new Response('이미 초대된 캐릭터입니다.', { status: 400 });
-      }
-      
-      // 캐릭터 초대
-      await env.DB.prepare(
-        'INSERT INTO conversation_participants (conversation_id, character_id, character_type) VALUES (?, ?, ?)'
-      ).bind(conversationId, characterId, finalCharacterType).run();
       
       return new Response(JSON.stringify({ success: true }), {
         headers: { 'Content-Type': 'application/json' }
@@ -258,7 +264,7 @@ export const handleConversationParticipants = {
       
     } catch (error) {
       await logError(error, env, 'Invite Character');
-      return new Response('캐릭터 초대에 실패했습니다.', { status: 500 });
+      return new Response(`캐릭터 초대에 실패했습니다: ${error.message}`, { status: 500 });
     }
   },
 

@@ -209,7 +209,7 @@ export async function getExtendedCharacterList(request, env) {
     const userId = user?.id;
 
     const officialCharsQuery = `
-        SELECT c.id, c.name, c.profile_image, c.sekai, 'official' as category 
+        SELECT c.id, c.name, c.profile_image, c.sekai, c.name_code, 'official' as category 
         FROM characters c
         LEFT JOIN user_sekai_preferences usp ON c.sekai = usp.sekai AND usp.user_id = ?
         WHERE c.sekai IS NULL OR usp.visible IS NULL OR usp.visible = 1

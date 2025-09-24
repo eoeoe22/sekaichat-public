@@ -6,7 +6,7 @@ export const handleCharacters = {
   async getAll(request, env) {
     try {
       const { results } = await env.DB.prepare(
-        'SELECT id, name, nickname, profile_image FROM characters ORDER BY id ASC'
+        'SELECT id, name, nickname, profile_image, sekai, name_code FROM characters ORDER BY id ASC'
       ).all();
       
       return new Response(JSON.stringify(results || []), {

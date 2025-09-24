@@ -1,4 +1,4 @@
-import { logError, verifyJwt } from './utils.js';
+import { logError, verifyJwt, callGemini } from './utils.js';
 import { generateAffectionPrompt, updateAffectionAuto } from './affection-system.js';
 import { getExtendedCharacterPrompt } from './user-characters.js';
 
@@ -17,6 +17,10 @@ async function getUserFromToken(request, env) {
     
     const user = await env.DB.prepare('SELECT * FROM users WHERE id = ?')
       .bind(tokenData.userId).first();
+    
+    if (!user) {
+      await logError(new Error(`User not found in database for ID: ${tokenData.userId}`), env, 'Gemini: GetUserFromToken');
+    }
     
     return user;
   } catch (error) {
@@ -168,6 +172,15 @@ export async function handleChat(request, env) {
     const user = await getUserFromToken(request, env);
     if (!user) return new Response('으....이....', { status: 401 });
     
+    // 사용자 존재 여부 확인 (Foreign Key 제약조건 오류 방지)
+    const userExists = await env.DB.prepare('SELECT id FROM users WHERE id = ?')
+      .bind(user.id).first();
+    
+    if (!userExists) {
+      await logError(new Error(`User ID ${user.id} from JWT token does not exist in database`), env, 'Handle Chat - User Validation');
+      return new Response('Invalid user session. Please login again.', { status: 401 });
+    }
+    
     await updateConversationTitle(conversationId, message, env);
     
     const newMessage = await saveChatMessage(conversationId, role, message, env, null, 0, user.id);
@@ -207,58 +220,33 @@ async function generateImageWithWorkersAI(prompt, env) {
 // Generate image using Gemini 2.0 Flash Preview Image Generation model with optional reference images
 // Supports image-to-image functionality by including the most recent image from conversation
 async function generateImageWithGemini(prompt, env, apiKey, latestImages = []) {
-    try {
-        // Build the parts array starting with the text prompt
-        const parts = [{ text: prompt }];
-        
-        // Add the latest images as reference images for image-to-image functionality
-        if (latestImages && latestImages.length > 0) {
-            // Use up to two recent images to avoid token limits (most recent first)
-            const imagesToUse = latestImages.slice(-2).reverse(); // 최근 2개, 역순
-            
-            for (const recentImage of imagesToUse) {
-                if (recentImage && recentImage.base64Data && recentImage.mimeType) {
-                    parts.push({
-                        inlineData: {
-                            mimeType: recentImage.mimeType,
-                            data: recentImage.base64Data
-                        }
-                    });
-                    console.log(`Image generation: Using reference image (${recentImage.mimeType}, ${recentImage.fileName || 'unknown'}) for prompt: "${prompt}"`);
-                }
+    const parts = [{ text: prompt }];
+    if (latestImages && latestImages.length > 0) {
+        const imagesToUse = latestImages.slice(-2).reverse();
+        for (const recentImage of imagesToUse) {
+            if (recentImage && recentImage.base64Data && recentImage.mimeType) {
+                parts.push({
+                    inlineData: {
+                        mimeType: recentImage.mimeType,
+                        data: recentImage.base64Data
+                    }
+                });
             }
-        } else {
-            console.log(`Image generation: No reference images available for prompt: "${prompt}"`);
         }
-        // 2.5 Flash image 가 안정화될때까지 임시로 구버전 이용
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent`, {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'x-goog-api-key': apiKey
-            },
-            body: JSON.stringify({
-                contents: [{
-                    parts: parts
-                }],
-                generationConfig: {
-                    responseModalities: ["TEXT", "IMAGE"]  // 중요: gemini-2.0-flash-preview-image-generation 모델은 TEXT와 IMAGE 모두 필요
-                }
-            })
-        });
+    }
 
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(`Gemini image generation API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+    const body = {
+        contents: [{ parts: parts }],
+        generationConfig: {
+            responseModalities: ["TEXT", "IMAGE"]
         }
+    };
 
-        const data = await response.json();
-        
-        // 응답 구조 검증 강화
+    try {
+        const data = await callGemini('gemini-2.0-flash-preview-image-generation', apiKey, body, env, 'Generate Image with Gemini');
         if (!data.candidates?.[0]?.content?.parts) {
             throw new Error('Invalid response structure from Gemini API');
         }
-        
         const imagePart = data.candidates[0].content.parts.find(part => part.inlineData);
         if (imagePart?.inlineData?.data && imagePart?.inlineData?.mimeType) {
             return { 
@@ -266,9 +254,7 @@ async function generateImageWithGemini(prompt, env, apiKey, latestImages = []) {
                 mimeType: imagePart.inlineData.mimeType 
             };
         }
-        
         throw new Error('No image data found in Gemini API response');
-
     } catch (error) {
         await logError(error, env, 'Generate Image with Gemini');
         return null;
@@ -311,6 +297,8 @@ export async function handleCharacterGeneration(request, env) {
     let latestImages = imageData ? [imageData] : await getLatestImagesFromHistory(conversationId, env);
     
     const apiKey = user.gemini_api_key || env.GEMINI_API_KEY;
+    
+    // Use Gemini API for character message generation
     const textResponse = await callGeminiAPI(
       characterPrompt, commonRulesPrompt, history, user.nickname, user.self_introduction,
       apiKey, currentTime, latestImages, autoCallCount || 0, maxAutoCallSequence,
@@ -430,156 +418,140 @@ export async function handleCharacterGeneration(request, env) {
 }
 
 async function callGeminiAPI(characterPrompt, commonRulesPrompt, history, userNickname, userSelfIntro, apiKey, currentTime, imageDataArray, autoCallSequence, maxAutoCallSequence, participants, situationPrompt, currentCharacterId, currentCharacterType, imageGenerationEnabled, env, imageCooldownSeconds, conversationId, autoragContext, selectedModel = 'gemini-2.5-flash') {
-  try {
-    // 모델명 호환성 처리
-    const modelMapping = {
-      'gemini-1.5-pro-latest': 'gemini-2.5-pro',
-      'gemini-1.5-flash-latest': 'gemini-2.5-flash',
-      'gemini-pro': 'gemini-2.5-flash',
-      'gemini-1.0-pro': 'gemini-2.5-flash'
-    };
-    
-    const finalModel = modelMapping[selectedModel] || selectedModel;
-    let systemPrompt = characterPrompt;
-    
-    if (commonRulesPrompt) {
-      systemPrompt += '\n\n' + commonRulesPrompt;
-    }
-    
-    if (participants && participants.length > 1) {
-      const otherParticipants = participants.filter(p => !(p.id === currentCharacterId && p.type === currentCharacterType));
-      if (otherParticipants.length > 0) {
-        const participantsText = otherParticipants
-          .map(p => `• ${p.name}: ${p.description || '소개 없음'}`)
-          .join('\n');
-        systemPrompt += '\n\n[현재 참가한 다른 캐릭터 목록 및 소개]\n' + participantsText;
-      }
-    }
+  const modelMapping = {
+    'gemini-1.5-pro-latest': 'gemini-2.5-pro',
+    'gemini-1.5-flash-latest': 'gemini-2.5-flash',
+    'gemini-pro': 'gemini-2.5-flash',
+    'gemini-1.0-pro': 'gemini-2.5-flash'
+  };
+  const finalModel = modelMapping[selectedModel] || selectedModel;
 
-    if (participants && participants.length > 0) {
-      const participantsList = participants.map(p => p.nickname ? `${p.name}(${p.nickname})` : p.name);
-      const participantsText = participantsList.map(name => `   • ${name}`).join('\n');
-      systemPrompt += '\n\n' + CHARACTER_CALL_SYSTEM.replace('{participantsList}', participantsText);
+  let systemPrompt = characterPrompt;
+  if (commonRulesPrompt) {
+    systemPrompt += '\n\n' + commonRulesPrompt;
+  }
+
+  if (participants && participants.length > 1) {
+    const otherParticipants = participants.filter(p => !(p.id === currentCharacterId && p.type === currentCharacterType));
+    if (otherParticipants.length > 0) {
+      const participantsText = otherParticipants
+        .map(p => `• ${p.name}: ${p.description || '소개 없음'}`)
+        .join('\n');
+      systemPrompt += '\n\n[현재 참가한 다른 캐릭터 목록 및 소개]\n' + participantsText;
     }
-    
-    if (userNickname) {
-      systemPrompt += `\n\n[사용자 정보]\n사용자 닉네임: ${userNickname}`;
-      if (userSelfIntro) {
-        systemPrompt += `\n사용자 자기소개: ${userSelfIntro}`;
-      }
+  }
+
+  if (participants && participants.length > 0) {
+    const participantsList = participants.map(p => p.nickname ? `${p.name}(${p.nickname})` : p.name);
+    const participantsText = participantsList.map(name => `   • ${name}`).join('\n');
+    systemPrompt += '\n\n' + CHARACTER_CALL_SYSTEM.replace('{participantsList}', participantsText);
+  }
+
+  if (userNickname) {
+    systemPrompt += `\n\n[사용자 정보]\n사용자 닉네임: ${userNickname}`;
+    if (userSelfIntro) {
+      systemPrompt += `\n사용자 자기소개: ${userSelfIntro}`;
     }
-    
-    if (currentTime) {
-      systemPrompt += `\n\n[현재 시간]\n${currentTime}`;
-    }
-    
-    if (situationPrompt && situationPrompt.trim()) {
-      systemPrompt += `\n\n[상황 설정]\n${situationPrompt.trim()}`;
-    }
-    
-    
-    
-    if (autoragContext) {
-      systemPrompt += `\n\n[스토리 기억]\n다음은 관련된 스토리 맥락입니다. 이 정보를 참고하여 답변에 활용해주세요:\n\n${autoragContext}`;
-    }
-    
-    if (conversationId) {
-      try {
-        const conversation = await env.DB.prepare(
-          'SELECT use_affection_sys FROM conversations WHERE id = ?'
-        ).bind(conversationId).first();
-        
-        if (conversation && conversation.use_affection_sys) {
-          const participant = await env.DB.prepare(
-            'SELECT affection_level FROM conversation_participants WHERE conversation_id = ? AND character_id = ? AND character_type = ?'
-          ).bind(conversationId, currentCharacterId, currentCharacterType).first();
-          
-          if (participant && participant.affection_level !== null) {
-            const affectionPrompt = generateAffectionPrompt(
-              currentCharacterId, 
-              participant.affection_level, 
-              userNickname
-            );
-            if (affectionPrompt) {
-              systemPrompt += '\n\n[호감도 정보]\n' + affectionPrompt;
-            }
+  }
+
+  if (currentTime) {
+    systemPrompt += `\n\n[현재 시간]\n${currentTime}`;
+  }
+
+  if (situationPrompt && situationPrompt.trim()) {
+    systemPrompt += `\n\n[상황 설정]\n${situationPrompt.trim()}`;
+  }
+
+  if (autoragContext) {
+    systemPrompt += `\n\n[스토리 기억]\n다음은 관련된 스토리 맥락입니다. 이 정보를 참고하여 답변에 활용해주세요:\n\n${autoragContext}`;
+  }
+
+  if (conversationId) {
+    try {
+      const conversation = await env.DB.prepare(
+        'SELECT use_affection_sys FROM conversations WHERE id = ?'
+      ).bind(conversationId).first();
+
+      if (conversation && conversation.use_affection_sys) {
+        const participant = await env.DB.prepare(
+          'SELECT affection_level FROM conversation_participants WHERE conversation_id = ? AND character_id = ? AND character_type = ?'
+        ).bind(conversationId, currentCharacterId, currentCharacterType).first();
+
+        if (participant && participant.affection_level !== null) {
+          const affectionPrompt = generateAffectionPrompt(
+            currentCharacterId, 
+            participant.affection_level, 
+            userNickname
+          );
+          if (affectionPrompt) {
+            systemPrompt += '\n\n[호감도 정보]\n' + affectionPrompt;
           }
         }
-      } catch (affectionError) {
-        await logError(affectionError, env, 'Affection System in Gemini API');
+      }
+    } catch (affectionError) {
+      await logError(affectionError, env, 'Affection System in Gemini API');
+    }
+  }
+
+  if (imageGenerationEnabled && await supportsImageGeneration(currentCharacterId, currentCharacterType, env)) {
+      let imagePrompt = `\n이미지 생성 기능 사용법: 그림을 그려달라는 요청을 받으면, 메시지에 <<여기에 그림에 대한 영어 프롬프트>>형식으로 이미지 생성 명령을 포함하세요.`;
+      systemPrompt += `\n\n${imagePrompt}`;
+  }
+
+  if (autoCallSequence > 0) {
+    systemPrompt += `\n\n[자동 호출 정보]\n현재 연속 호출 순서: ${autoCallSequence}/${maxAutoCallSequence}`;
+  }
+
+  if (history && history.length > 0) {
+    systemPrompt += '\n\n[대화 기록]';
+    const conversationHistory = history.map(msg => {
+      if (!msg.content) return null;
+      if (msg.role === 'user') {
+        return `${msg.nickname || '사용자'} : ${msg.content}`;
+      } else if (msg.role === 'assistant') {
+        return `${msg.character_name || '캐릭터'} : ${msg.content}`;
+      } else if (msg.role === 'situation') {
+          return `[상황] ${msg.content}`;
+      }
+      return null;
+    }).filter(Boolean).join('\n-----\n');
+
+    if (conversationHistory) {
+      systemPrompt += '\n' + conversationHistory;
+    }
+  }
+
+  const messages = [{ role: 'user', parts: [{ text: systemPrompt }] }];
+  if (imageDataArray && Array.isArray(imageDataArray) && imageDataArray.length > 0) {
+    for (const imageData of imageDataArray) {
+      if (imageData && imageData.base64Data && imageData.mimeType) {
+        messages[messages.length - 1].parts.push({
+          inlineData: { mimeType: imageData.mimeType, data: imageData.base64Data }
+        });
       }
     }
-    
-    if (imageGenerationEnabled && await supportsImageGeneration(currentCharacterId, currentCharacterType, env)) {
-        let imagePrompt = `\n이미지 생성 기능 사용법: 그림을 그려달라는 요청을 받으면, 메시지에 <<여기에 그림에 대한 영어 프롬프트>>형식으로 이미지 생성 명령을 포함하세요.`;
-        systemPrompt += `\n\n${imagePrompt}`;
+  }
+
+  const body = {
+    contents: messages,
+    generationConfig: {
+      temperature: 0.8, topK: 40, topP: 0.95, maxOutputTokens: 2048
     }
-    
-    if (autoCallSequence > 0) {
-      systemPrompt += `\n\n[자동 호출 정보]\n현재 연속 호출 순서: ${autoCallSequence}/${maxAutoCallSequence}`;
-    }
-    
-    if (history && history.length > 0) {
-      systemPrompt += '\n\n[대화 기록]';
-      const conversationHistory = history.map(msg => {
-        if (!msg.content) return null;
-        if (msg.role === 'user') {
-          return `${msg.nickname || '사용자'} : ${msg.content}`;
-        } else if (msg.role === 'assistant') {
-          return `${msg.character_name || '캐릭터'} : ${msg.content}`;
-        } else if (msg.role === 'situation') {
-            return `[상황] ${msg.content}`;
-        }
-        return null;
-      }).filter(Boolean).join('\n-----\n');
-      
-      if (conversationHistory) {
-        systemPrompt += '\n' + conversationHistory;
-      }
-    }
-    
-    const messages = [{ role: 'user', parts: [{ text: systemPrompt }] }];
-    
-    // Add multiple images if available
-    if (imageDataArray && Array.isArray(imageDataArray) && imageDataArray.length > 0) {
-      for (const imageData of imageDataArray) {
-        if (imageData && imageData.base64Data && imageData.mimeType) {
-          messages[messages.length - 1].parts.push({
-            inlineData: { mimeType: imageData.mimeType, data: imageData.base64Data }
-          });
-        }
-      }
-    }
-    
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${finalModel}:generateContent`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey
-      },
-      body: JSON.stringify({
-        contents: messages,
-        generationConfig: {
-          temperature: 0.8, topK: 40, topP: 0.95, maxOutputTokens: 2048
-        }
-      })
-    });
-    
-    if (!response.ok) throw new Error(`Gemini API 오류: ${response.status}`);
-    
-    const data = await response.json();
-    
+  };
+
+  try {
+    const data = await callGemini(finalModel, apiKey, body, env, 'Character Generation');
     if (data.candidates && data.candidates[0] && data.candidates[0].content) {
       return data.candidates[0].content.parts[0].text;
     } else {
       throw new Error('Gemini API 응답이 비어있습니다.');
     }
-    
   } catch (error) {
     console.error('Gemini API 호출 실패:', error);
     throw error;
   }
 }
+
 
 export async function handleAutoReply(request, env) {
   try {
@@ -612,21 +584,19 @@ export async function handleAutoReply(request, env) {
         const prompt = `최근 대화 내용입니다:\n${historyText}\n\n대화 참가자 목록: [${participantNames.join(', ')}, ${userNickname}]\n\n다음으로 답변할 대화 참가자를 목록에서 선정해 이름만 정확히 말해주세요.`;
 
         const apiKey = user.gemini_api_key || env.GEMINI_API_KEY;
-        const nextSpeakerNameResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent`, {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'x-goog-api-key': apiKey
-            },
-            body: JSON.stringify({
-                contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 1.0, maxOutputTokens: 50 }
-            })
-        });
-        
-        if (!nextSpeakerNameResponse.ok) continue;
-        const nextSpeakerData = await nextSpeakerNameResponse.json();
-        const nextSpeakerName = nextSpeakerData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        const body = {
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 1.0, maxOutputTokens: 50 }
+        };
+
+        let nextSpeakerName = null;
+        try {
+            const nextSpeakerData = await callGemini('gemini-2.5-flash-lite', apiKey, body, env, 'Auto-Reply Speaker Selection');
+            nextSpeakerName = nextSpeakerData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        } catch (error) {
+            await logError(error, env, 'Auto-Reply Speaker Selection');
+            continue; // Continue to next iteration on error
+        }
 
         // 4. Check if the user was selected
         if (!nextSpeakerName || nextSpeakerName.includes('유저') || nextSpeakerName.includes(userNickname)) {
@@ -729,33 +699,24 @@ async function getAutoragMemoryContext(conversationId, user, env) {
       return null;
     }
 
-    // --- START: New Keyword Extraction Logic ---
     const apiKey = user?.gemini_api_key || env.GEMINI_API_KEY;
     const keywordPrompt = `다음 대화 내역에서 핵심 키워드를 쉼표로 구분해 나열하세요. (현재 대화중인 주제의 키워드만 나열하며, 대화가 다른 주제로 넘어갔다면 그 이전 대화의 키워드는 무시합니다):\n\n${conversationText}`;
 
-    const keywordResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent`, {
-        method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            'x-goog-api-key': apiKey
-        },
-        body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: keywordPrompt }] }],
-            generationConfig: { temperature: 0.0, maxOutputTokens: 100 }
-        })
-    });
+    const body = {
+        contents: [{ role: 'user', parts: [{ text: keywordPrompt }] }],
+        generationConfig: { temperature: 0.0, maxOutputTokens: 100 }
+    };
 
     let keywords = conversationText.trim(); // Fallback to original text
-    if (keywordResponse.ok) {
-        const keywordData = await keywordResponse.json();
+    try {
+        const keywordData = await callGemini('gemini-2.5-flash-lite', apiKey, body, env, 'AutoRAG Keyword Extraction');
         const extractedKeywords = keywordData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
         if (extractedKeywords) {
             keywords = extractedKeywords;
         }
-    } else {
-        await logError(new Error(`Keyword extraction failed: ${keywordResponse.status}`), env, 'AutoRAG Keyword Extraction');
+    } catch (error) {
+        await logError(error, env, 'AutoRAG Keyword Extraction');
     }
-    // --- END: New Keyword Extraction Logic ---
     
     // Cloudflare AutoRAG로 검색
     try {
@@ -935,10 +896,8 @@ async function refreshChatHistoryCache(conversationId, env) {
     const history = await getChatHistoryFromDB(conversationId, env);
     if (history.length > 0) {
       const historyJson = JSON.stringify(history);
-      await env.DB.prepare(
-        `INSERT OR REPLACE INTO conversation_history_cache (conversation_id, history, updated_at)
-         VALUES (?, ?, CURRENT_TIMESTAMP)`
-      ).bind(conversationId, historyJson).run();
+      const cacheKey = `chat_history:${conversationId}`;
+      await env.KV.put(cacheKey, historyJson);
     }
   } catch (error) {
     await logError(error, env, 'Refresh Chat History Cache');
@@ -949,14 +908,13 @@ async function refreshChatHistoryCache(conversationId, env) {
 async function getChatHistory(conversationId, env) {
   try {
     // 1. Try to get from cache
-    const cached = await env.DB.prepare(
-      'SELECT history FROM conversation_history_cache WHERE conversation_id = ?'
-    ).bind(conversationId).first();
+    const cacheKey = `chat_history:${conversationId}`;
+    const cachedHistory = await env.KV.get(cacheKey);
 
-    if (cached && cached.history) {
+    if (cachedHistory) {
       try {
         // If cache hit, return parsed data
-        return JSON.parse(cached.history);
+        return JSON.parse(cachedHistory);
       } catch (e) {
         await logError(e, env, 'Get Chat History - JSON Parse Error');
         // Fall through to fetch from DB if JSON is invalid
@@ -1147,23 +1105,19 @@ export async function handleSelectSpeaker(request, env) {
     const prompt = `최근 대화 내용입니다:\n${historyText}\n\n대화 참가자 목록: [${participantNames.join(', ')}, ${userNickname}]\n\n바로 직전 발언자는 "${lastSpeakerName}"입니다. 대화의 흐름상 꼭 필요한 경우가 아니라면, "${lastSpeakerName}"가 아닌 다른 참가자를 다음 발언자로 선정해주세요. 다음으로 답변할 대화 참가자를 목록에서 선정해 이름만 정확히 말해주세요.`;
 
     const apiKey = user.gemini_api_key || env.GEMINI_API_KEY;
-    const nextSpeakerNameResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent`, {
-        method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            'x-goog-api-key': apiKey
-        },
-        body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 1.0, maxOutputTokens: 50 }
-        })
-    });
-    
-    if (!nextSpeakerNameResponse.ok) {
+    const body = {
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 1.0, maxOutputTokens: 50 }
+    };
+
+    let nextSpeakerName = null;
+    try {
+        const nextSpeakerData = await callGemini('gemini-2.5-flash-lite', apiKey, body, env, 'Select Speaker');
+        nextSpeakerName = nextSpeakerData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    } catch (error) {
+        await logError(error, env, 'handleSelectSpeaker');
         return new Response(JSON.stringify({ speaker: null, reason: 'selection_failed' }), { headers: { 'Content-Type': 'application/json' } });
     }
-    const nextSpeakerData = await nextSpeakerNameResponse.json();
-    const nextSpeakerName = nextSpeakerData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
 
     if (!nextSpeakerName || nextSpeakerName.includes('유저') || nextSpeakerName.includes(userNickname)) {
         return new Response(JSON.stringify({ speaker: null, reason: 'user_selected' }), { headers: { 'Content-Type': 'application/json' } });

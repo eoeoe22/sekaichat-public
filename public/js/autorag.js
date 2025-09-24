@@ -7,6 +7,77 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     let characterData = [];
 
+    // --- Load Server Status ---
+    async function loadServerStatus() {
+        try {
+            const response = await fetch('/api/autorag/status');
+            if (!response.ok) {
+                throw new Error('서버 상태 정보를 불러오는데 실패했습니다.');
+            }
+            const status = await response.json();
+            displayServerStatus(status);
+        } catch (error) {
+            console.error(error);
+            document.getElementById('serverStatusContent').innerHTML = `
+                <div class="text-danger">
+                    <i class="bi bi-exclamation-triangle"></i> ${error.message}
+                </div>
+            `;
+        }
+    }
+
+    // --- Display Server Status ---
+    function displayServerStatus(status) {
+        const content = document.getElementById('serverStatusContent');
+        
+        let html = '<div class="row">';
+        
+        // Korean server status
+        html += '<div class="col-md-6">';
+        html += '<h6><i class="bi bi-server"></i> 한국 서버</h6>';
+        if (status.vectorize.error) {
+            html += `<div class="text-danger small">오류: ${escapeHtml(status.vectorize.error)}</div>`;
+        } else if (status.vectorize.lastModified) {
+            const date = new Date(status.vectorize.lastModified);
+            const formattedDate = date.toLocaleString('ko-KR', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZone: 'Asia/Seoul'
+            });
+            html += `<div class="text-success small">최종 업데이트: ${formattedDate}</div>`;
+        } else {
+            html += '<div class="text-muted small">데이터 없음</div>';
+        }
+        html += '</div>';
+        
+        // Japanese server status
+        html += '<div class="col-md-6">';
+        html += '<h6><i class="bi bi-server"></i> 일본 서버</h6>';
+        if (status.vectorize_jp.error) {
+            html += `<div class="text-danger small">오류: ${escapeHtml(status.vectorize_jp.error)}</div>`;
+        } else if (status.vectorize_jp.lastModified) {
+            const date = new Date(status.vectorize_jp.lastModified);
+            const formattedDate = date.toLocaleString('ko-KR', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZone: 'Asia/Seoul'
+            });
+            html += `<div class="text-success small">최종 업데이트: ${formattedDate}</div>`;
+        } else {
+            html += '<div class="text-muted small">데이터 없음</div>';
+        }
+        html += '</div>';
+        
+        html += '</div>';
+        content.innerHTML = html;
+    }
+
     // --- Fetch Character Data ---
     async function loadCharacterData() {
         try {
@@ -72,17 +143,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         logContainer.innerHTML = '<p class="text-muted mb-0">작업을 시작하려면 검색 버튼을 누르세요.</p>';
         addLog('검색을 시작합니다...');
 
+        const server = document.querySelector('input[name="server"]:checked').value;
+
         try {
             if (mode === 'ai') {
                 addLog('AI 모드가 활성화되었습니다. Gemini API로 키워드를 추출합니다.', 'ai');
             }
+
+            addLog(`${server === 'jp' ? '일본' : '한국'} 서버에서 검색을 시작합니다.`);
 
             const response = await fetch('/api/autorag/preview', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ query, mode })
+                body: JSON.stringify({ query, mode, server })
             });
 
             if (!response.ok) {
@@ -138,8 +213,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (parts.length > 1) {
             const charName = parts[0].trim();
             const dialogue = escapeHtml(parts[1].trim());
-            
+            const server = document.querySelector('input[name="server"]:checked').value;
+
             const character = characterData.find(c => {
+                if (server === 'jp') {
+                    if (c.first_name_jp === charName) return true;
+                }
                 if (c.nickname === charName) return true;
                 const nameParts = c.name.split(' ');
                 if (nameParts.length > 1) {
@@ -245,4 +324,5 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Initial Load
     loadCharacterData();
+    loadServerStatus();
 });

@@ -58,16 +58,6 @@
     to { opacity: 1; transform: translateX(0); }
 }
 
-@keyframes typing {
-    from { width: 0; }
-    to { width: 100%; }
-}
-
-@keyframes blink-caret {
-    from, to { border-color: transparent; }
-    50% { border-color: var(--text-light); }
-}
-
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     background-color: var(--bg-color);
@@ -112,10 +102,7 @@ body {
     margin-bottom: 1rem;
     color: var(--text-light);
     display: inline-block;
-    overflow: hidden;
-    white-space: nowrap;
-    border-right: .15em solid var(--text-light);
-    animation: typing 3.5s steps(40, end), blink-caret .75s step-end infinite;
+    animation: fadeIn 1s ease-out;
 }
 
 .hero p {
@@ -192,6 +179,217 @@ body {
 
 .feature-card:hover .feature-icon {
     transform: scale(1.1);
+}
+
+/* Feature Cards Carousel Styles */
+.feature-carousel-container {
+    position: relative;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Icon Navigation Indicators */
+.carousel-icon-nav {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-bottom: 30px;
+    flex-wrap: wrap;
+}
+
+.icon-indicator {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: var(--card-bg);
+    border: 2px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.icon-indicator i {
+    font-size: 1.4rem;
+    color: var(--text-color);
+    transition: all 0.3s ease;
+}
+
+.icon-indicator:hover {
+    background: var(--button-color);
+    border-color: var(--button-color);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+}
+
+.icon-indicator:hover i {
+    color: white;
+    transform: scale(1.1);
+}
+
+.icon-indicator.active {
+    background: var(--button-color);
+    border-color: var(--button-color);
+    transform: scale(1.1);
+    box-shadow: 0 6px 25px rgba(0,0,0,0.2);
+}
+
+.icon-indicator.active i {
+    color: white;
+    transform: scale(1.1);
+}
+
+.carousel-nav {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    pointer-events: none;
+    transform: translateY(-50%);
+}
+
+.carousel-btn {
+    position: absolute;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: 2px solid var(--border-color);
+    background: var(--card-bg);
+    color: var(--text-color);
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    pointer-events: auto;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    backdrop-filter: blur(10px);
+}
+
+.carousel-btn:hover {
+    background: var(--button-color);
+    color: white;
+    transform: scale(1.1);
+    box-shadow: 0 6px 25px rgba(0,0,0,0.15);
+}
+
+.carousel-btn-prev {
+    left: -25px;
+}
+
+.carousel-btn-next {
+    right: -25px;
+}
+
+.feature-carousel-wrapper {
+    overflow: hidden;
+    width: 100%;
+    position: relative;
+}
+
+.feature-carousel {
+    display: flex;
+    transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    width: 800%; /* 8 slides = 800% */
+}
+
+.carousel-slide {
+    flex: 0 0 12.5%;
+    width: 12.5%;
+    padding: 0 15px;
+    display: flex;
+    justify-content: center;
+}
+
+.carousel-slide .feature-card {
+    max-width: 400px;
+    width: 100%;
+}
+
+.carousel-indicators {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 30px;
+}
+
+.indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--border-color);
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.indicator.active {
+    background: var(--button-color);
+    transform: scale(1.2);
+}
+
+.indicator:hover {
+    background: var(--button-hover-color);
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+    .carousel-icon-nav {
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+    
+    .icon-indicator {
+        width: 40px;
+        height: 40px;
+    }
+    
+    .icon-indicator i {
+        font-size: 1.1rem;
+    }
+    
+    .carousel-btn {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+    }
+    
+    .carousel-btn-prev {
+        left: -20px;
+    }
+    
+    .carousel-btn-next {
+        right: -20px;
+    }
+    
+    .carousel-slide {
+        padding: 0 10px;
+    }
+}
+
+@media (max-width: 640px) {
+    .carousel-icon-nav {
+        gap: 8px;
+        margin-bottom: 15px;
+    }
+    
+    .icon-indicator {
+        width: 35px;
+        height: 35px;
+    }
+    
+    .icon-indicator i {
+        font-size: 1rem;
+    }
+    
+    .carousel-btn-prev {
+        left: -15px;
+    }
+    
+    .carousel-btn-next {
+        right: -15px;
+    }
 }
 
 .footer {
@@ -489,10 +687,7 @@ body {
 
     .hero h1 {
         font-size: 2.5rem;
-        white-space: normal;
-        overflow: visible;
-        animation: none;
-        border-right: none;
+        animation: fadeIn 1s ease-out;
     }
     
     .hero p {

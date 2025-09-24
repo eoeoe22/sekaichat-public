@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const unlinkDiscordBtn = document.getElementById('unlinkDiscordBtn');
     const sekaiFilterContainer = document.getElementById('sekaiFilterContainer');
     const saveSekaiSettingsBtn = document.getElementById('saveSekaiSettingsBtn');
+    const saveTtsLanguageBtn = document.getElementById('saveTtsLanguageBtn');
 
     // --- 초기화 ---
     async function initializeSettings() {
@@ -53,6 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
         deleteApiKeyBtn.addEventListener('click', deleteApiKey);
         unlinkDiscordBtn.addEventListener('click', unlinkDiscord);
         saveSekaiSettingsBtn.addEventListener('click', saveSekaiPreferences);
+        saveTtsLanguageBtn.addEventListener('click', updateTtsLanguageSetting);
         
         // 내 캐릭터 관련 이벤트는 user-characters.js에서 처리
         // 데이터 이전 관련 이벤트
@@ -72,7 +74,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // 채팅 설정
         document.getElementById('maxAutoCall').value = userInfo.max_auto_call_sequence || 3;
 
-        // API 키
+        // TTS 언어 설정
+        const ttsLanguage = userInfo.tts_language_preference || 'jp';
+        document.getElementById('ttsLanguageKr').checked = (ttsLanguage === 'kr');
+        document.getElementById('ttsLanguageJp').checked = (ttsLanguage === 'jp');
+
+        // API 설정
         updateApiKeyUI();
 
         // Discord 연동 정보
@@ -209,6 +216,19 @@ document.addEventListener('DOMContentLoaded', () => {
             alert(`설정 저장 실패: ${error.message}`);
         }
     }
+
+    async function updateTtsLanguageSetting() {
+        const ttsLanguage = document.querySelector('input[name="ttsLanguage"]:checked').value;
+        try {
+            await postUserUpdate({ type: 'tts_language_preference', tts_language_preference: ttsLanguage });
+            alert('TTS 언어 설정이 저장되었습니다.');
+            await loadUserInfo();
+            updateUI();
+        } catch (error) {
+            alert(`TTS 언어 설정 저장 실패: ${error.message}`);
+        }
+    }
+
 
     async function manageApiKey(e) {
         e.preventDefault();

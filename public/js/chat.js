@@ -8,44 +8,126 @@ let autoCallInProgress = false;
 let currentWorkMode = false;
 let currentShowTime = true;
 let currentSituationPrompt = '';
-// ✅ 추가: 마크다운 표시 상태 (기본 false)
 let showMarkdown = false;
-// ✅ 추가: 이미지 생성 상태 (기본 false)
 let imageGenerationEnabled = false;
-// ✅ 추가: 호감도 시스템 상태 (기본 false)
 let affectionSystemEnabled = false;
-// ✅ 추가: AutoRAG 스토리 기억 상태 (기본 false)
 let autoragMemoryEnabled = false;
 let autoReplyModeEnabled = false;
+let continuousResponseEnabled = true; // 기본값은 true (연속응답 활성화)
 let awaitingUserMessageResponse = false;
 let proModeEnabled = false;
 let generationAbortController = null;
+
+let isGeneratingTTS = false;
+
+function showSnackbar(message, type = 'info') { // type: 'info', 'warning', 'success'
+    const snackbar = document.getElementById('snackbar');
+    if (!snackbar) return;
+    snackbar.textContent = message;
+    
+    snackbar.classList.remove('warning', 'success');
+    if (type === 'warning') {
+        snackbar.classList.add('warning');
+    } else if (type === 'success') {
+        snackbar.classList.add('success');
+    }
+
+    snackbar.classList.add('show');
+
+    setTimeout(function() {
+        snackbar.classList.remove('show');
+    }, 3000);
+}
+
+// TTS handling function
+async function handleTTS(characterNameCode, messageText, messageId) {
+    if (isGeneratingTTS) {
+        showSnackbar('TTS가 이미 생성 중입니다. 잠시 후 다시 시도해주세요.', 'warning');
+        return;
+    }
+
+    isGeneratingTTS = true;
+    showSnackbar('TTS 생성을 시작합니다...');
+
+    try {
+        const cleanText = stripMarkdown(messageText).replace(/\s+/g, ' ').trim();
+        
+        if (!cleanText) {
+            throw new Error('음성으로 변환할 텍스트가 없습니다.');
+        }
+
+        const maxLength = 200;
+        const baseText = cleanText.length > maxLength ? 
+            cleanText.substring(0, maxLength) + '...' : cleanText;
+
+        let processedText = await processTextForTTS(baseText);
+
+        const response = await fetch('/api/tts', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                text: processedText,
+                character_name_code: characterNameCode,
+                language: 'japanese'
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(errorText || 'TTS 생성 실패');
+        }
+
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        
+        audio.onerror = () => {
+            URL.revokeObjectURL(audioUrl);
+            showSnackbar('오디오 재생에 실패했습니다.', 'warning');
+        };
+        
+        audio.onended = () => {
+            URL.revokeObjectURL(audioUrl);
+        };
+        
+        await audio.play();
+        showSnackbar('TTS 생성 완료!', 'success');
+        
+    } catch (error) {
+        console.error('TTS 오류:', error);
+        showSnackbar(error.message, 'warning');
+    } finally {
+        isGeneratingTTS = false;
+    }
+}
 
 // 🔧 이미지 생성 쿨다운 관리
 let lastImageGeneration = null;
 const IMAGE_COOLDOWN_SECONDS = 20;
 
-const GEMINI_ERROR_GUIDANCE = `<h4><i class="bi bi-question-circle-fill"></i> 원인</h4>
+const GEMINI_ERROR_GUIDANCE = `<h4><i class=\"bi bi-question-circle-fill\"></i> 원인</h4>
 <p>메시지 처리 중 오류가 발생하는 주요 원인은 다음과 같습니다.</p>
 
-<strong class="d-block mt-3"><i class="bi bi-geo-alt-fill"></i> Gemini 지역 제한 (가장 흔함)</strong>
-<p class="mt-2 mb-1 text-muted" style="font-size: 0.9rem;">이 사이트는 Cloudflare Workers를 기반으로 동작하며, 사용자의 위치에 따라 가장 가까운 서버에서 요청을 처리합니다. 간혹 홍콩 서버에서 요청이 처리될 수 있는데, Google Gemini는 홍콩 지역에서 이용할 수 없어 오류가 발생합니다.</p>
-<div class="alert alert-light mt-3">
-    <h5 class="alert-heading fs-6"><i class="bi bi-lightbulb-fill"></i> 해결 방법</h5>
-    <ul class="mb-0 ps-4">
+<strong class=\"d-block mt-3\"><i class=\"bi bi-geo-alt-fill\"></i> Gemini 지역 제한 (가장 흔함)</strong>
+<p class=\"mt-2 mb-1 text-muted\" style=\"font-size: 0.9rem;\">이 사이트는 Cloudflare Workers를 기반으로 동작하며, 사용자의 위치에 따라 가장 가까운 서버에서 요청을 처리합니다. 간혹 홍콩 서버에서 요청이 처리될 수 있는데, Google Gemini는 홍콩 지역에서 이용할 수 없어 오류가 발생합니다.</p>
+<div class=\"alert alert-light mt-3\">
+    <h5 class=\"alert-heading fs-6\"><i class=\"bi bi-lightbulb-fill\"></i> 해결 방법</h5>
+    <ul class=\"mb-0 ps-4\">
         <li>모바일 데이터 대신 Wi-Fi를 사용해보세요.</li>
         <li>일본 또는 미국 VPN을 사용하는 것을 권장합니다.</li>
     </ul>
 </div>
 
-<hr class="my-4">
+<hr class=\"my-4\">
 
-<strong class="d-block mt-3"><i class="bi bi-cone-striped"></i> Gemini API 사용량 제한</strong>
-<p class="mt-2 mb-1 text-muted" style="font-size: 0.9rem;">이 사이트의 AI 기능은 Gemini API를 사용하며, 시간당 사용량 제한이 있습니다. 짧은 시간 동안 많은 요청이 발생하면 일시적으로 사용이 제한될 수 있습니다.</p>
-<div class="alert alert-light mt-3">
-    <h5 class="alert-heading fs-6"><i class="bi bi-lightbulb-fill"></i> 해결 방법</h5>
-    <p class="mb-2">사용량 제한은 보통 1분 내외로 짧습니다. 잠시 후 다시 시도해주세요.</p>
-    <ul class="mb-0 ps-4">
+<strong class=\"d-block mt-3\"><i class=\"bi bi-cone-striped\"></i> Gemini API 사용량 제한</strong>
+<p class=\"mt-2 mb-1 text-muted\" style=\"font-size: 0.9rem;\">이 사이트의 AI 기능은 Gemini API를 사용하며, 시간당 사용량 제한이 있습니다. 짧은 시간 동안 많은 요청이 발생하면 일시적으로 사용이 제한될 수 있습니다.</p>
+<div class=\"alert alert-light mt-3\">
+    <h5 class=\"alert-heading fs-6\"><i class=\"bi bi-lightbulb-fill\"></i> 해결 방법</h5>
+    <p class=\"mb-2\">사용량 제한은 보통 1분 내외로 짧습니다. 잠시 후 다시 시도해주세요.</p>
+    <ul class=\"mb-0 ps-4\">
         <li>다른 Gemini 모델로 변경해보세요 (모델별로 사용량이 다르게 적용됩니다).</li>
         <li>서버의 공용 API를 사용하는 경우, 여러 사용자가 동시에 사용하므로 제한에 더 자주 도달할 수 있습니다. 개인 API 키를 등록하면 더 쾌적하게 이용 가능합니다.</li>
     </ul>
@@ -186,6 +268,8 @@ function setImageGenerationCooldown() {
     lastImageGeneration = Date.now();
 }
 
+
+
 // 이미지 생성 지원 캐릭터 확인
 function supportsImageGeneration(characterId, characterType) {
     const character = availableCharacters.find(c => c.id === characterId && (c.category === characterType || (c.is_user_character && characterType === 'user') || (!c.is_user_character && characterType === 'official')));
@@ -239,6 +323,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.location.href = '/login';
             return;
         }
+
+
 
         await loadUserInfo();
         await loadCharacters();
@@ -327,9 +413,9 @@ function stripMarkdown(input) {
     text = text.replace(/``````/g, m => m.replace(/``````$/, ''));
     text = text.replace(/`([^`]+)`/g, '$1');
     text = text.replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1');
-    text = text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+    text = text.replace(/!\[([^\]]+)\]\([^)]+\)/g, '$1');
     text = text.replace(/(\*\*|__)(.*?)\1/g, '$2');
-    text = text.replace(/(\*|_)(.*?)\1/g, '$2');
+    text = text.replace(/(\+|_)(.*?)\1/g, '$2');
     text = text.replace(/~~(.*?)~~/g, '$1');
     text = text.replace(/^ {0,3}#{1,6}\s+/gm, '');
     text = text.replace(/^ {0,3}>\s?/gm, '');
@@ -339,6 +425,7 @@ function stripMarkdown(input) {
     text = text.replace(/^\|.*\|$/gm, line => line.replace(/\|/g, ' ').trim());
     text = text.replace(/^\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+$/gm, '');
     text = text.replace(/\\([\\`*_{}\[\]()#+\-.!>~|])/g, '$1');
+    text = text.replace(/<[^>]*>/g, ''); // Remove HTML tags
     text = text.replace(/[ \t]+\n/g, '\n');
     text = text.replace(/\n{3,}/g, '\n\n');
     return text.trim();
@@ -349,12 +436,12 @@ function markdownToHtml(src) {
     if (!src) return '';
     let text = escapeHtml(src);
     text = text.replace(/``````/g,
-        (m, lang, code) => `<pre class="md-code-block"><code>${escapeHtml(code).replace(/</g,'&lt;')}</code></pre>`);
-    text = text.replace(/`([^`]+)`/g, (m, code) => `<code.class="md-inline-code">${code}</code>`);
+        (m, lang, code) => `<pre class=\"md-code-block\"><code${escapeHtml(code).replace(/</g,'&lt;')}</code></pre>`);
+    text = text.replace(/`([^`]+)`/g, (m, code) => `<code.class=\"md-inline-code\">${code}</code>`);
     text = text.replace(/!\[([^\]]*)\]\([^)]+\)/g, (m, alt) => alt);
-    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, t) => `<span class="md-link-text">${t}</span>`);
+    text = text.replace(/!\[([^\]]+)\]\(([^)]+)\)/g, (m, t) => `<span class=\"md-link-text\">${t}</span>`);
     text = text.replace(/(\*\*|__)(.*?)\1/g, '<strong>$2</strong>');
-    text = text.replace(/(\*|_)(.*?)\1/g, '<em>$2</em>');
+    text = text.replace(/(\+|_)(.*?)\1/g, '<em>$2</em>');
     text = text.replace(/~~(.*?)~~/g, '<del>$1</del>');
     text = text.replace(/^ {0,3}###### (.*)$/gm, '<h6>$1</h6>');
     text = text.replace(/^ {0,3}##### (.*)$/gm, '<h5>$1</h5>');
@@ -469,6 +556,8 @@ function setupEventListeners() {
     document.getElementById('situationPromptBtn').addEventListener('click', showSituationPromptModal);
     document.getElementById('saveSituationBtn').addEventListener('click', saveSituationPrompt);
     document.getElementById('clearSituationBtn').addEventListener('click', clearSituationPrompt);
+    
+
 
     const mdToggle = document.getElementById('markdownToggle');
     if (mdToggle) mdToggle.addEventListener('change', e => { showMarkdown = e.target.checked; applyMarkdownMode(); });
@@ -483,6 +572,7 @@ function setupEventListeners() {
     if (autoragToggle) autoragToggle.addEventListener('change', handleAutoragMemoryToggle);
 
     document.getElementById('autoReplyToggle').addEventListener('change', handleAutoReplyToggle);
+    document.getElementById('continuousResponseToggle').addEventListener('change', handleContinuousResponseToggle);
 }
 
 // 이모지 토글
@@ -597,6 +687,9 @@ function showSituationPromptModal() {
     const modal = new bootstrap.Modal(document.getElementById('situationPromptModal'));
     const input = document.getElementById('situationPromptInput');
     input.value = currentSituationPrompt;
+    
+
+    
     modal.show();
     setTimeout(() => input.focus(), 300);
 }
@@ -640,7 +733,7 @@ async function handleAffectionToggle(e) {
         const response = await fetch('/api/affection/toggle', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
+            body: JSON.stringify({
                 conversationId: currentConversationId, 
                 useAffectionSys 
             })
@@ -677,7 +770,7 @@ async function handleAutoragMemoryToggle(e) {
         const response = await fetch('/api/conversations/autorag-memory', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
+            body: JSON.stringify({
                 conversationId: currentConversationId, 
                 useAutoragMemory 
             })
@@ -704,6 +797,15 @@ async function handleAutoragMemoryToggle(e) {
 async function handleAutoReplyToggle(e) {
     const isEnabled = e.target.checked;
     autoReplyModeEnabled = isEnabled;
+    
+    // 연속응답 체크박스 표시/숨김
+    const continuousContainer = document.getElementById('continuousResponseContainer');
+    if (isEnabled) {
+        continuousContainer.style.display = 'block';
+    } else {
+        continuousContainer.style.display = 'none';
+    }
+    
     if (!currentConversationId) return;
     try {
         await fetch(`/api/conversations/${currentConversationId}/auto-reply-mode`, {
@@ -714,7 +816,17 @@ async function handleAutoReplyToggle(e) {
     } catch {
         e.target.checked = !isEnabled;
         autoReplyModeEnabled = !isEnabled;
+        // 실패 시 원래 상태로 되돌리기
+        if (!isEnabled) {
+            continuousContainer.style.display = 'block';
+        } else {
+            continuousContainer.style.display = 'none';
+        }
     }
+}
+
+function handleContinuousResponseToggle(e) {
+    continuousResponseEnabled = e.target.checked;
 }
 
 // 호감도 관리 모달 표시
@@ -752,15 +864,15 @@ function updateAffectionModal(data) {
     const characterList = document.getElementById('affectionCharacterList');
     
     if (!data.use_affection_sys) {
-        statusDiv.innerHTML = `<div class="alert alert-info"><i class="bi bi-info-circle"></i> 호감도 시스템이 비활성화되어 있습니다.</div>`;
+        statusDiv.innerHTML = `<div class=\"alert alert-info\"><i class=\"bi bi-info-circle\"></i> 호감도 시스템이 비활성화되어 있습니다.</div>`;
         characterList.innerHTML = '';
         return;
     }
     
-    statusDiv.innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle"></i> 호감도 시스템이 활성화되어 있습니다.</div>`;
+    statusDiv.innerHTML = `<div class=\"alert alert-success\"><i class=\"bi bi-check-circle\"></i> 호감도 시스템이 활성화되어 있습니다.</div>`;
     
     if (data.participants.length === 0) {
-        characterList.innerHTML = `<div class="text-center py-4 text-muted"><i class="bi bi-person-plus fs-2"></i><p class="mt-2">대화에 참여한 캐릭터가 없습니다.</p></div>`;
+        characterList.innerHTML = `<div class=\"text-center py-4 text-muted\"><i class=\"bi bi-person-plus fs-2\"></i><p class=\"mt-2\">대화에 참여한 캐릭터가 없습니다.</p></div>`;
         return;
     }
     
@@ -830,7 +942,7 @@ function getAffectionClass(level) {
 
 // 호감도 버튼으로 조절
 async function adjustAffection(characterId, characterType, amount) {
-    const characterItem = document.querySelector(`[onclick*="adjustAffection(${characterId}, '${characterType}'"]`).closest('.character-affection-item');
+    const characterItem = document.querySelector(`[onclick*=\"adjustAffection(${characterId}, '${characterType}'\"]`).closest('.character-affection-item');
     const valueSpan = characterItem.querySelector('.affection-value');
     let currentValue = parseInt(valueSpan.textContent);
     let newValue = currentValue + amount;
@@ -1047,6 +1159,14 @@ async function loadConversation(id) {
             document.getElementById('workModeToggle').checked = currentWorkMode;
             document.getElementById('showTimeToggle').checked = currentShowTime;
             document.getElementById('autoReplyToggle').checked = autoReplyModeEnabled;
+            
+            // 자동 답변 모드 상태에 따라 연속응답 체크박스 표시/숨김
+            const continuousContainer = document.getElementById('continuousResponseContainer');
+            if (autoReplyModeEnabled) {
+                continuousContainer.style.display = 'block';
+            } else {
+                continuousContainer.style.display = 'none';
+            }
             
             const autoragToggle = document.getElementById('autoragMemoryToggle');
             if (autoragToggle) autoragToggle.checked = autoragMemoryEnabled;
@@ -1268,7 +1388,8 @@ async function triggerAutoReply() {
     autoCallInProgress = true;
 
     try {
-        const maxSequence = userInfo?.max_auto_call_sequence || 1;
+        // 연속 응답이 비활성화된 경우 한 번만 응답
+        const maxSequence = continuousResponseEnabled ? (userInfo?.max_auto_call_sequence || 1) : 1;
         let autoCallCount = 0;
 
         while (autoCallCount < maxSequence) {
@@ -1633,7 +1754,7 @@ function handleEmojiLoadError(emojiId) {
 
 // 커스텀 이모지 파싱
 function parseCustomEmoji(content) {
-    const emojiRegex = /::([\가-힣\w\s\-_\(\)!]+\.(jpg|jpeg|png|gif|webp))::/i;
+    const emojiRegex = /::([\uAC00-\uD7A3\w\s\-_\(\)!]+\.(jpg|jpeg|png|gif|webp))::/i;
     const match = content.match(emojiRegex);
     if (match) {
         const emojiFileName = match[1];
@@ -1641,6 +1762,44 @@ function parseCustomEmoji(content) {
         return { text, emoji: emojiFileName };
     }
     return { text: content, emoji: null };
+}
+
+// TTS support helper function
+function getCharacterTTSInfo(characterName) {
+    if (!characterName) return null;
+    
+    // Find character in available characters list
+    const character = availableCharacters.find(char => 
+        char.name === characterName && 
+        char.sekai === '프로젝트 세카이' && 
+        char.name_code
+    );
+    
+    return character ? { name_code: character.name_code } : null;
+}
+
+// TTS button generation helper
+function createTTSButton(characterName, messageText, messageId) {
+    const ttsInfo = getCharacterTTSInfo(characterName);
+    if (!ttsInfo) return '';
+    
+    // Safely escape text for onclick handler - properly escape for JavaScript strings in HTML attributes
+    function escapeForJSString(text) {
+        return text
+            .replace(/\\/g, '\\\\')  // Escape backslashes first
+            .replace(/'/g, "\\'")    // Escape single quotes
+            .replace(/"/g, '\\"')    // Escape double quotes  
+            .replace(/\n/g, '\\n')   // Escape newlines
+            .replace(/\r/g, '\\r')   // Escape carriage returns
+            .replace(/\t/g, '\\t');  // Escape tabs
+    }
+    
+    const escapedNameCode = escapeForJSString(ttsInfo.name_code);
+    const escapedText = escapeForJSString(messageText);
+    
+    return `<button class="tts-button btn btn-sm btn-outline-primary" onclick="handleTTS('${escapedNameCode}', '${escapedText}', ${messageId || 'null'})" title="음성으로 듣기">
+        <i class="bi bi-soundwave"></i>
+    </button>`;
 }
 
 // 메시지 추가
@@ -1670,11 +1829,9 @@ function addMessage(role, content, characterName = null, characterImage = null, 
     const escapedPlain = escapeHtml(plainProcessed);
     const processedText = processLongText(escapedPlain);
     const deleteButtonHtml = role !== 'system' && messageId ?
-        `<div class="message-delete-wrapper">
-            <button class="message-delete-btn" onclick="deleteMessage(${messageId}, this.closest('.message'))" title="메시지 삭제">
-                <i class="bi bi-trash-fill"></i>
-            </button>
-        </div>` : '';
+        `<button class="message-delete-btn" onclick="deleteMessage(${messageId}, this.closest('.message'))" title="메시지 삭제">
+            <i class="bi bi-trash-fill"></i>
+        </button>` : '';
 
     if (role === 'assistant') {
         let avatarSrc = '/images/characters/kanade.webp';
@@ -1698,6 +1855,7 @@ function addMessage(role, content, characterName = null, characterImage = null, 
                     </div>
                 </div>`;
         } else {
+            const ttsButtonHtml = createTTSButton(characterName, rawForMarkdown, messageId);
             messageDiv.innerHTML = `
                 <img src="${avatarSrc}" alt="${escapeHtml(altText)}" class="message-avatar" onerror="this.src='/images/characters/kanade.webp'">
                 <div class="message-content">
@@ -1705,7 +1863,10 @@ function addMessage(role, content, characterName = null, characterImage = null, 
                         ${showMarkdown ? markdownToHtml(rawForMarkdown) : processedText}
                     </div>
                     ${emoji ? createCustomEmojiHTML(emoji) : ''}
-                    ${deleteButtonHtml}
+                    <div class="message-actions">
+                        ${ttsButtonHtml}
+                        ${deleteButtonHtml}
+                    </div>
                 </div>`;
         }
     } else if (role === 'system') {
@@ -1725,7 +1886,9 @@ function addMessage(role, content, characterName = null, characterImage = null, 
                     ${showMarkdown ? markdownToHtml(rawForMarkdown) : processedText}
                 </div>
                 ${emoji ? createCustomEmojiHTML(emoji) : ''}
-                ${deleteButtonHtml}
+                <div class="message-actions">
+                    ${deleteButtonHtml}
+                </div>
             </div>`;
     }
     messagesDiv.appendChild(messageDiv);
@@ -1817,6 +1980,40 @@ function showErrorModal(message) {
     errorModal.show();
 }
 
+// TTS 텍스트 처리 함수 (사용자 언어 설정에 따라 번역 또는 원본 사용)
+async function processTextForTTS(text) {
+    try {
+        const response = await fetch('/api/tts/translate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                text: text,
+                target: 'japanese'  // 이 파라미터는 이제 백엔드에서 무시되고 사용자 설정을 따름
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            // 새로운 로직: 번역 실패시 원본 텍스트로 폴백하지 않고 오류 발생
+            throw new Error(`텍스트 처리 실패: ${response.status} ${response.statusText} - ${errorText}`);
+        }
+
+        const result = await response.json();
+        if (!result.translatedText) {
+            throw new Error('처리된 텍스트를 받을 수 없습니다.');
+        }
+        
+        return result.translatedText;
+    } catch (error) {
+        console.error('TTS 텍스트 처리 중 오류 발생:', error);
+        throw error; // 오류를 다시 던져서 TTS 실패 처리
+    }
+}
+
+
+
 // 전역 노출
 window.loadConversation = loadConversation;
 window.startNewConversation = startNewConversation;
@@ -1825,5 +2022,6 @@ window.deleteMessage = deleteMessage;
 window.updateInvitedCharactersUI = updateInvitedCharactersUI;
 window.inviteCharacter = inviteCharacter;
 window.updateAffectionLevel = updateAffectionLevel;
-window.adjustAffectionLevel = adjustAffectionLevel; // 전역 노출 추가
-window.updateAffectionType = updateAffectionType; // 전역 노출 추가
+window.adjustAffection = adjustAffection;
+window.updateAffectionType = updateAffectionType;
+window.handleTTS = handleTTS;

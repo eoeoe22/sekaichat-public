@@ -46,6 +46,28 @@
                         <a href="/" class="btn btn-sm btn-outline-secondary">메인으로</a>
                     </div>
                     <div class="card-body">
+                        <!-- Server Data Status -->
+                        <div class="alert alert-info mb-3" id="serverStatusAlert">
+                            <h6 class="alert-heading"><i class="bi bi-info-circle"></i> 서버 데이터 상태</h6>
+                            <div id="serverStatusContent">
+                                <div class="text-center">
+                                    <div class="spinner-border spinner-border-sm" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    데이터 상태 확인 중...
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">서버 선택</label>
+                            <div class="btn-group w-100" role="group" aria-label="Server selection">
+                                <input type="radio" class="btn-check" name="server" id="server-kr" value="kr" autocomplete="off" checked>
+                                <label class="btn btn-outline-primary" for="server-kr">한국 서버</label>
+
+                                <input type="radio" class="btn-check" name="server" id="server-jp" value="jp" autocomplete="off">
+                                <label class="btn btn-outline-primary" for="server-jp">일본 서버</label>
+                            </div>
+                        </div>
                         <div class="mb-3">
                             <label for="queryInput" class="form-label">검색할 내용</label>
                             <textarea class="form-control" id="queryInput" rows="4" placeholder="여기에 검색할 내용을 입력하세요..."></textarea>

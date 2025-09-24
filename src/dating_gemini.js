@@ -1,6 +1,6 @@
 // FILE: src/dating_gemini.js (New File)
 
-import { logError } from './utils.js';
+import { logError, callGemini } from './utils.js';
 
 function getLocationDisplayName(location) {
     const names = {
@@ -48,21 +48,12 @@ ${conversationHistory}
 
 이제 ${character.name}으로서, 위의 모든 상황과 감정을 고려하여 자연스럽게 응답하세요. 응답은 당신의 대사만 포함해야 합니다.`;
             
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'x-goog-api-key': env.GEMINI_API_KEY
-                },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: systemPrompt }] }],
-                    generationConfig: { temperature: 0.8, maxOutputTokens: 500 }
-                })
-            });
+            const body = {
+                contents: [{ parts: [{ text: systemPrompt }] }],
+                generationConfig: { temperature: 0.8, maxOutputTokens: 500 }
+            };
 
-            if (!response.ok) throw new Error(`Gemini API error: ${response.status}`);
-            
-            const data = await response.json();
+            const data = await callGemini('gemini-2.5-flash', env.GEMINI_API_KEY, body, env, 'DatingGemini: generateCharacterResponse');
             return data.candidates[0].content.parts[0].text.trim();
 
         } catch (error) {
@@ -83,21 +74,12 @@ ${conversationHistory}
 
 [평가 (숫자만 응답)]`;
 
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'x-goog-api-key': env.GEMINI_API_KEY
-                },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { temperature: 0.2, maxOutputTokens: 5 }
-                })
-            });
+            const body = {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.2, maxOutputTokens: 5 }
+            };
 
-            if (!response.ok) return 0;
-
-            const data = await response.json();
+            const data = await callGemini('gemini-2.5-flash', env.GEMINI_API_KEY, body, env, `DatingGemini: analyzeAffectionChange (${affectionType})`);
             const changeText = data.candidates[0].content.parts[0].text.trim();
             const change = parseInt(changeText.match(/-?\d+/)?.[0] || '0');
             
@@ -148,21 +130,12 @@ ${conversationHistory}
 
 [업데이트된 기억]`;
 
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'x-goog-api-key': env.GEMINI_API_KEY
-                },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { temperature: 0.7, maxOutputTokens: 300 }
-                })
-            });
+            const body = {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.7, maxOutputTokens: 300 }
+            };
 
-            if (!response.ok) return;
-
-            const data = await response.json();
+            const data = await callGemini('gemini-2.5-flash', env.GEMINI_API_KEY, body, env, 'DatingGemini: updateCharacterMemory');
             const newMemory = data.candidates[0].content.parts[0].text.trim();
 
             await env.DB.prepare(`

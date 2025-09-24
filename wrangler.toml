@@ -9,17 +9,29 @@ binding = "DB"
 database_name = "sekai-chat"
 database_id = ""
 
-# 이건 카나데 1ㄷ1 챗봇에서 마이그레이션 용도
 [[d1_databases]]
 binding = "KANADE_DB"
 database_name = "kanade"
-database_id = "아이디"
+database_id = ""
 
+# 메인 바인딩
 [[r2_buckets]]
 binding = "R2"
-bucket_name = "<YOUR_BUCKET_NAME>"
+bucket_name = "kanade-images"
 
 
+# 스토리 검색기에서 단순히 시간정보 불러오기용
+[[r2_buckets]]
+binding = "AutoRAG2"
+bucket_name = "vectorize-jp"
+
+[[r2_buckets]]
+binding = "AutoRAG1"
+bucket_name = "vectorize"
+
+[[kv_namespaces]]
+binding = "KV"
+id = ""
 
 [ai]
 binding = "AI"
@@ -30,21 +42,22 @@ binding = "AI"
 enabled = true
 head_sampling_rate = 1.0
 
-#게스트 api키는 같은걸로 해도 상관없음
-#게스트 체험페이지에서는별도로 쓰는거
-
 [vars]
-GEMINI_API_KEY = "우아와왕"
-GUEST_GEMINI_API_KEY = "우아와왕"
-TURNSTILE_SITE_KEY = "아와와왕"
-TURNSTILE_SECRET_KEY = "젭"
-DOMAIN = "주소"
-JWT_SECRET = "아무거나 막ㅇㅇㅇㅇ"
+GEMINI_API_KEY = ""
+GUEST_GEMINI_API_KEY = ""
+TTS_SERVICE_URL = ""
+TTS_API_KEY = ""
+
+TURNSTILE_SITE_KEY = ""
+TURNSTILE_SECRET_KEY = "_"
+DOMAIN = "sekaich.at"
+JWT_SECRET = ""
 IMAGE_GENERATION_CHARACTERS = "0,3"
-DISCORD_CLIENT_ID = "디코 로그인/가입 연동"
-DISCORD_CLIENT_SECRET = "        "
-DISCORD_REDIRECT_URI = "https://도메인/auth/discord/callback"
+DISCORD_CLIENT_ID = ""
+DISCORD_CLIENT_SECRET = ""
+DISCORD_REDIRECT_URI = "https://sekaich.at/auth/discord/callback"
 25FLASH_IMAGE = "true"
+AI_GATEWAY_TOKEN = ""
 
 IMAGE_GENERATION_PROMPT = """
 이미지 생성 기능 사용법 : 그림을 그려달라는 요청을 받으면, 메시지에 <<여기에 그림에 대한 영어 프롬프트>>형식으로 이미지 생성 명령을 포함합니다. 프롬프트는 반드시 영어로, 구체적이고 상세하게 작성해주세요. 또 특별히 사용자가 스타일을 언급하지 않았다면, 연필 스케치 스타일로 이미지를 생성하세요. 이미지 생성 명령은 외부 시스템에 의해 자동으로 이미지로 변환될것입니다.
@@ -85,6 +98,16 @@ COMMON_RULES_PROMPT = """
 
 
 """
+
+
+
+
+
+
+
+
+
+
 
 
 

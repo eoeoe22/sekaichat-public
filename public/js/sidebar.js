@@ -78,12 +78,29 @@ async function loadNotice() {
         const response = await fetch('/api/notice');
         if (response.ok) {
             const data = await response.json();
-            const formattedNotice = data.content.replace(/\n/g, '<br>');
             const noticeEl = document.getElementById('noticeContent');
-            if (noticeEl) noticeEl.innerHTML = formattedNotice;
+            if (noticeEl) {
+                // Handle both single notice and array of notices
+                if (Array.isArray(data) && data.length > 0) {
+                    // Array format (like main.html)
+                    const noticeHtml = data.map(notice => notice.content).join('<br><br>');
+                    noticeEl.innerHTML = noticeHtml;
+                } else if (data.content) {
+                    // Single notice format
+                    const formattedNotice = data.content.replace(/\n/g, '<br>');
+                    noticeEl.innerHTML = formattedNotice;
+                } else {
+                    noticeEl.textContent = '공지사항이 없습니다.';
+                }
+            }
+        } else {
+            const noticeEl = document.getElementById('noticeContent');
+            if (noticeEl) noticeEl.textContent = '공지사항을 불러오는데 실패했습니다.';
         }
     } catch (error) {
         console.error('공지사항 로드 실패:', error);
+        const noticeEl = document.getElementById('noticeContent');
+        if (noticeEl) noticeEl.textContent = '공지사항을 불러오는데 실패했습니다.';
     }
     
     // 성공/실패 관계없이 로딩 완료 신호 (전역 로딩 상태 업데이트)

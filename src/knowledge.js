@@ -84,8 +84,8 @@ export async function updateConversationKnowledge(request, env, conversationId) 
             .bind(JSON.stringify(knowledgeIds), conversationId).run();
             
         // 캐시 무효화
-        await env.DB.prepare('DELETE FROM conversation_history_cache WHERE conversation_id = ?')
-            .bind(conversationId).run();
+        const cacheKey = `chat_history:${conversationId}`;
+        await env.KV.delete(cacheKey);
 
         return new Response(JSON.stringify({ success: true, knowledge_ids: knowledgeIds }), {
             headers: { 'Content-Type': 'application/json' }

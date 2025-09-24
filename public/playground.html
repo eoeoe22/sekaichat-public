@@ -9,6 +9,39 @@
     <link rel="stylesheet" href="/css/style.css">
     <!-- 전체 로딩 오버레이 & 헤더 확장 커스텀 보조 스타일 -->
     <style>
+        /* Snackbar styles */
+        #snackbar {
+            visibility: hidden;
+            min-width: 250px;
+            margin-left: -125px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 16px;
+            position: fixed;
+            z-index: 10000;
+            left: 50%;
+            top: 30px;
+            font-size: 17px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            transition: top 0.5s, opacity 0.5s;
+            opacity: 0;
+        }
+
+        #snackbar.show {
+            visibility: visible;
+            top: 50px;
+            opacity: 1;
+        }
+
+        #snackbar.warning {
+            background-color: #dc3545; /* Bootstrap danger red */
+        }
+        
+        #snackbar.success {
+            background-color: #198754; /* Bootstrap success green */
+        }
         /* 글로벌 로딩 오버레이 */
         #globalLoadingOverlay {
             position: fixed;
@@ -277,6 +310,45 @@
         .conversation-modal-search .input-group {
             gap: 0;
         }
+        
+        /* Notice banner styles for playground sidebar */
+        .notice-banner-container {
+            position: relative;
+            width: 100%;
+            margin-top: 8px;
+        }
+        .notice-banner-container img {
+            width: 100%;
+            border-radius: 12px;
+            max-height: 150px;
+            object-fit: cover;
+        }
+        .notice-announcement {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 12px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+        
+        /* Mobile styles - make notice cover entire image */
+        @media (max-width: 992px) {
+            .notice-announcement {
+                background-color: rgba(0, 0, 0, 0.8);
+                font-size: 0.85rem;
+                padding: 10px 14px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -287,6 +359,7 @@
         <div class="loading-text">로딩 중...</div>
     </div>
 
+    <div id="snackbar" class=""></div>
     <div class="chat-container">
         <!-- ===== 사이드바 영역 ===== -->
         <div id="sidebar" class="sidebar p-3">
@@ -320,9 +393,14 @@
                     </div>
                     <div id="conversationList"></div>
                 </div>
-                <div class="form-section notice-section">
+                <div class="form-section notice-banner-section">
                     <h6><i class="bi bi-info-circle"></i> | 공지사항</h6>
-                    <p id="noticeContent"></p>
+                    <div class="notice-banner-container">
+                        <div class="notice-announcement">
+                            <div id="noticeContent">공지사항을 불러오는 중...</div>
+                        </div>
+                        <img src="/images/etc/main_banner.png" alt="Notice Banner">
+                    </div>
                 </div>
                 <div class="form-section">
                     <h6><i class="bi bi-gear"></i> | 설정</h6>
@@ -442,7 +520,14 @@
                                     자동 답변 모드 <i class="bi bi-robot"></i>
                                 </label>
                             </div>
+                            <div class="form-check form-switch" id="continuousResponseContainer" style="display: none; margin-left: 20px; margin-top: 5px;">
+                                <input class="form-check-input" type="checkbox" id="continuousResponseToggle" checked>
+                                <label class="form-check-label" for="continuousResponseToggle">
+                                    연속 응답 <i class="bi bi-arrow-repeat"></i>
+                                </label>
+                            </div>
                         </div>
+
                     </div>
                     <div class="situation-prompt-section">
                         <button id="situationPromptBtn" class="btn btn-outline-secondary btn-sm">

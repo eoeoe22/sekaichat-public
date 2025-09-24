@@ -46,7 +46,18 @@ export const handleAuth = {
             'INSERT INTO users (username, password_hash, salt, nickname, discord_id, discord_username, discord_avatar) VALUES (?, ?, ?, ?, ?, ?, ?)'
           ).bind(username, passwordHash, salt, nickname, discordUser.id, discordUser.username, discordUser.avatar).run();
           
+          // 사용자 생성 확인 및 조회
+          if (!result.meta || !result.meta.last_row_id) {
+            await logError(new Error('Failed to create user: no last_row_id returned'), env, 'Discord OAuth - User Creation');
+            return new Response('Failed to create user account', { status: 500 });
+          }
+          
           user = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(result.meta.last_row_id).first();
+          
+          if (!user) {
+            await logError(new Error(`User creation succeeded but user not found with ID: ${result.meta.last_row_id}`), env, 'Discord OAuth - User Verification');
+            return new Response('User creation verification failed', { status: 500 });
+          }
         }
       } else {
         // 이미 연동된 사용자의 경우, 사용자명과 아바타 정보 업데이트
@@ -179,13 +190,11 @@ export const handleAuth = {
       const geminiApiKey = formData.get('gemini_api_key') || null;
       const turnstileToken = formData.get('cf-turnstile-response');
       
-      // Turnstile 검증
       const turnstileValid = await verifyTurnstile(turnstileToken, env);
       if (!turnstileValid) {
         return new Response('으....이....', { status: 400 });
       }
       
-      // 중복 사용자 확인
       const existingUser = await env.DB.prepare('SELECT id FROM users WHERE username = ?')
         .bind(username).first();
       
@@ -193,18 +202,57 @@ export const handleAuth = {
         return new Response('으....이....', { status: 409 });
       }
       
-      // 비밀번호 해싱
       const salt = generateSalt();
       const passwordHash = await hashPassword(password, salt);
       
-      // 사용자 생성
-      await env.DB.prepare(
-        'INSERT INTO users (username, nickname, password_hash, salt, gemini_api_key) VALUES (?, ?, ?, ?, ?)'
-      ).bind(username, nickname, passwordHash, salt, geminiApiKey).run();
-      
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { 'Content-Type': 'application/json' }
+      const result = await env.DB.prepare(
+        'INSERT INTO users (username, nickname, password_hash, salt, gemini_api_key) VALUES (?, ?, ?, ?, ?) RETURNING id'
+      ).bind(username, nickname, passwordHash, salt, geminiApiKey).first();
+
+      if (!result || !result.id) {
+        await logError(new Error('User registration failed: No ID returned from insert'), env, 'Auth Register');
+        return new Response('으....이....', { status: 500 });
+      }
+
+      const userId = result.id;
+
+      const token = await createJwt({ 
+        userId: userId, 
+        exp: Date.now() + (24 * 60 * 60 * 1000),
+        iat: Date.now()
+      }, env);
+
+      const url = new URL(request.url);
+      const isSecure = url.protocol === 'https:';
+
+      const response = new Response(JSON.stringify({ success: true }), {
+        headers: { 
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate'
+        }
       });
+
+      const cookieOptions = [
+        `token=${token}`,
+        'HttpOnly',
+        'SameSite=Lax',
+        'Max-Age=86400',
+        'Path=/'
+      ];
+
+      if (!url.hostname.includes('localhost') && 
+          !url.hostname.includes('127.0.0.1') && 
+          !url.hostname.includes('.local')) {
+        cookieOptions.push(`Domain=${url.hostname}`);
+      }
+
+      if (isSecure) {
+        cookieOptions.push('Secure');
+      }
+
+      response.headers.set('Set-Cookie', cookieOptions.join('; '));
+      return response;
+
     } catch (error) {
       await logError(error, env, 'Auth Register');
       return new Response('으....이....', { status: 500 });

@@ -4,6 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>메인 - 세카이 채팅</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#007bff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="세카이채팅">
+    <link rel="manifest" href="/manifest.json">
+    
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="/css/style.css">
@@ -13,19 +21,24 @@
             width: 100%;
             max-width: 860px;
             margin: 40px auto 30px;
+            border-radius: 18px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            transition: transform .3s ease, box-shadow .3s ease;
         }
         .banner-container img {
             width: 100%;
             border-radius: 18px;
+            transition: transform .3s ease;
         }
         .announcement {
             position: absolute;
             top: 0;
-            bottom: 16px;
+            bottom: 52px;
             width: 40.38%;
             margin-left: 55.51%;
-            background-color: rgba(0, 0, 0, 0.7);
-            color: white;
+            background-color: transparent;
+            color: black;
             padding: 16px 20px;
             border-radius: 8px;
             overflow-y: auto;
@@ -61,7 +74,7 @@
             box-shadow: 0 4px 24px var(--shadow-color);
             position: relative;
             overflow: hidden;
-            transition: transform .35s cubic-bezier(.4,0,.2,1), box-shadow .35s cubic-bezier(.4,0,.2,1);
+            transition: transform .4s cubic-bezier(.4,0,.2,1), box-shadow .4s cubic-bezier(.4,0,.2,1), border-color .4s ease;
         }
         .feature-card::before {
             content:"";
@@ -72,12 +85,29 @@
             transition: opacity .5s ease;
             pointer-events:none;
         }
+        .feature-card::after {
+            content:"";
+            position:absolute;
+            top:-50%;
+            left:-50%;
+            width:200%;
+            height:200%;
+            background: conic-gradient(from 0deg, transparent, rgba(135,206,235,.1), transparent 30%);
+            opacity:0;
+            transition: opacity .5s ease, transform .5s ease;
+            pointer-events:none;
+        }
         .feature-card:hover {
-            transform: translateY(-6px);
-            box-shadow: 0 10px 36px var(--shadow-hover);
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: 0 12px 40px var(--shadow-hover);
+            border-color: var(--button-color);
         }
         .feature-card:hover::before {
             opacity:1;
+        }
+        .feature-card:hover::after {
+            opacity:1;
+            transform: rotate(180deg);
         }
         .feature-icon {
             width:54px;
@@ -91,6 +121,12 @@
             font-size:1.5rem;
             box-shadow:0 6px 18px rgba(70,130,180,.35);
             margin-bottom:18px;
+            transition: transform .4s cubic-bezier(.4,0,.2,1), box-shadow .4s ease;
+            position: relative;
+        }
+        .feature-card:hover .feature-icon {
+            transform: scale(1.1) rotate(5deg);
+            box-shadow:0 8px 24px rgba(70,130,180,.5);
         }
         .feature-card h3 {
             font-size:1.25rem;
@@ -123,6 +159,12 @@
             padding:4px 8px;
             border-radius: 999px;
             box-shadow:0 2px 8px rgba(0,0,0,.15);
+            transition: transform .3s ease, box-shadow .3s ease;
+            z-index: 10;
+        }
+        .feature-card:hover .badge-status {
+            transform: scale(1.1);
+            box-shadow:0 4px 12px rgba(0,0,0,.25);
         }
         footer {
             text-align:center;
@@ -145,6 +187,8 @@
                 margin-left: 0;
                 padding: 12px 16px;
                 font-size: 0.9rem;
+                background-color: rgba(0, 0, 0, 0.7);
+                color: white;
             }
             .announcement h2 {
                 font-size: 1.1rem;
@@ -158,6 +202,7 @@
     </style>
 </head>
 <body>
+    <!-- 공지사항 배너에는 호버 애니메이션 적용 금지 -->
     <div class="container py-4">
         <section class="banner-container">
             <div class="announcement">
@@ -176,7 +221,7 @@
                 </div>
                 <h3>Playground</h3>
                 <p>가볍게 AI 챗봇과의 대화를 즐길수 있는 공긴입니다.</p>
-                <a href="/playground" class="btn btn-primary w-100">
+                <a href="/chat" class="btn btn-primary w-100">
                     <i class="bi bi-box-arrow-in-right me-1"></i> 들어가기
                 </a>
             </div>
@@ -260,5 +305,24 @@
             });
         }
     </script>
+    
+    <!-- PWA Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((registration) => {
+                        console.log('SW registered: ', registration);
+                    })
+                    .catch((registrationError) => {
+                        console.log('SW registration failed: ', registrationError);
+                    });
+            });
+        }
+    </script>
 </body>
 </html>
+
+
+
+

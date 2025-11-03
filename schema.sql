@@ -7,14 +7,14 @@ CREATE TABLE characters (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 , sekai TEXT, name_code TEXT, first_name TEXT, "first_name_jp" TEXT)
 
-CREATE TABLE conversation_history_cache (
+CREATE TABLE "conversation_history_cache" (
     conversation_id INTEGER PRIMARY KEY,
     history TEXT NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (conversation_id) REFERENCES "temp_conversations"(id) ON DELETE CASCADE
+    FOREIGN KEY (conversation_id) REFERENCES "conversations"(id) ON DELETE CASCADE
 )
 
-CREATE TABLE conversation_participants (
+CREATE TABLE "conversation_participants" (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     conversation_id INTEGER NOT NULL,
     character_id INTEGER NOT NULL,
@@ -23,7 +23,7 @@ CREATE TABLE conversation_participants (
     affection_level INTEGER DEFAULT 0 CHECK (affection_level >= -100 AND affection_level <= 100),
     affection_type TEXT DEFAULT 'friendship' NOT NULL CHECK (affection_type IN ('friendship', 'love')),
     message_count INTEGER DEFAULT 0,
-    FOREIGN KEY (conversation_id) REFERENCES "temp_conversations"(id) ON DELETE CASCADE
+    FOREIGN KEY (conversation_id) REFERENCES "conversations"(id) ON DELETE CASCADE
 )
 
 CREATE TABLE conversations (
@@ -54,7 +54,7 @@ CREATE TABLE dating_characters (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 
-CREATE TABLE dating_checkpoints (
+CREATE TABLE "dating_checkpoints" (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     dating_conversation_id INTEGER NOT NULL,
     name TEXT NOT NULL,
@@ -66,7 +66,7 @@ CREATE TABLE dating_checkpoints (
     message_count INTEGER NOT NULL,
     character_memory TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (dating_conversation_id) REFERENCES "temp_dating_conversations"(id) ON DELETE CASCADE
+    FOREIGN KEY (dating_conversation_id) REFERENCES "dating_conversations"(id) ON DELETE CASCADE
 )
 
 CREATE TABLE dating_conversations (
@@ -86,7 +86,7 @@ CREATE TABLE dating_conversations (
     FOREIGN KEY (character_id) REFERENCES dating_characters(id)
 )
 
-CREATE TABLE dating_messages (
+CREATE TABLE "dating_messages" (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     dating_conversation_id INTEGER NOT NULL,
     role TEXT NOT NULL,
@@ -95,7 +95,7 @@ CREATE TABLE dating_messages (
     location TEXT NOT NULL,
     is_offline_meeting INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (dating_conversation_id) REFERENCES "temp_dating_conversations"(id) ON DELETE CASCADE
+    FOREIGN KEY (dating_conversation_id) REFERENCES "dating_conversations"(id) ON DELETE CASCADE
 )
 
 CREATE TABLE files (
@@ -118,7 +118,7 @@ CREATE TABLE knowledge_base (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 
-CREATE TABLE messages (
+CREATE TABLE "messages" (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     conversation_id INTEGER NOT NULL,
     role TEXT NOT NULL,
@@ -132,9 +132,9 @@ CREATE TABLE messages (
     character_type TEXT DEFAULT 'official' NOT NULL,
     user_characters_id integer,
     user_character_id INTEGER,
-    FOREIGN KEY (conversation_id) REFERENCES "temp_conversations"(id),
+    FOREIGN KEY (conversation_id) REFERENCES "conversations"(id),
     FOREIGN KEY (character_id) REFERENCES characters(id),
-    FOREIGN KEY (file_id) REFERENCES "temp_files"(id)
+    FOREIGN KEY (file_id) REFERENCES "files"(id)
 )
 
 CREATE TABLE notices (
@@ -159,7 +159,7 @@ CREATE TABLE user_character_affection (
     character_memory TEXT,
     last_memory_update TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, affection_level INTEGER DEFAULT 50 CHECK (affection_level >= -100 AND affection_level <= 100), affection_type TEXT DEFAULT 'friendship' NOT NULL CHECK (affection_type IN ('friendship', 'love')),
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (character_id) REFERENCES dating_characters(id),
     UNIQUE(user_id, character_id)
@@ -199,5 +199,3 @@ CREATE TABLE users (
     max_auto_call_sequence INTEGER DEFAULT 3,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 , tts_language_preference TEXT DEFAULT 'jp')
-
-

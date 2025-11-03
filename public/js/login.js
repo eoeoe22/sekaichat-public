@@ -1,29 +1,4 @@
-// 페이지 로드 시 로그인 상태 확인 및 자동 리디렉션
-async function checkLoginStatusAndRedirect() {
-    try {
-        const response = await fetch('/api/auth/status', {
-            method: 'GET',
-            credentials: 'same-origin',
-            cache: 'no-cache'
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            if (data.authenticated) {
-                // 이미 로그인된 상태라면 메인 페이지로 리디렉션
-                window.location.href = '/main';
-                return;
-            }
-        }
-    } catch (error) {
-        // 에러가 발생해도 로그인 페이지는 그대로 표시
-        console.log('Auth status check failed:', error);
-    }
-}
-
-// 페이지 로드 시 자동으로 로그인 상태 확인
-document.addEventListener('DOMContentLoaded', checkLoginStatusAndRedirect);
-
+// 로그인 폼 제출 처리
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     

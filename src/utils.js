@@ -41,6 +41,10 @@ export async function createJwt(payload, env) {
 // JWT를 검증하고 페이로드를 반환합니다.
 export async function verifyJwt(token, env) {
   try {
+    if (!token || typeof token !== 'string') {
+      return null;
+    }
+
     const key = await getJwtSecretKey(env);
     const [header, payload, signature] = token.split('.');
     
@@ -52,26 +56,36 @@ export async function verifyJwt(token, env) {
     const encoder = new TextEncoder();
     
     // Signature를 ArrayBuffer로 디코딩
-    const signatureBuffer = Uint8Array.from(atob(signature.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+    let signatureBuffer;
+    try {
+      signatureBuffer = Uint8Array.from(atob(signature.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+    } catch (decodeError) {
+      // Base64 디코딩 실패
+      return null;
+    }
     
     const isValid = await crypto.subtle.verify('HMAC', key, signatureBuffer, encoder.encode(dataToVerify));
     
     if (!isValid) {
-      logDebug('JWT 서명 검증 실패', 'JWT Verify');
       return null;
     }
     
-    const decodedPayload = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    let decodedPayload;
+    try {
+      decodedPayload = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    } catch (parseError) {
+      // JSON 파싱 실패
+      return null;
+    }
     
     // 토큰 만료 확인
     if (decodedPayload.exp && Date.now() > decodedPayload.exp) {
-      logDebug('JWT 토큰 만료됨', 'JWT Verify');
       return null;
     }
     
     return decodedPayload;
   } catch (error) {
-    logError(error, env, 'JWT Verify');
+    await logError(error, env, 'JWT Verify');
     return null;
   }
 }
@@ -115,14 +129,21 @@ export function logDebug(message, context = '', data = null) {
 
 // 사용자 인증 정보 가져오기
 export async function getAuth(request, env) {
-  const cookie = request.headers.get('Cookie');
-  if (!cookie) return null;
+  try {
+    const cookie = request.headers.get('Cookie');
+    if (!cookie) return null;
 
-  const tokenMatch = cookie.match(/token=([^;]+)/);
-  if (!tokenMatch) return null;
+    const tokenMatch = cookie.match(/(?:^|[; ])token=([^; ]+)/);
+    if (!tokenMatch) return null;
 
-  const token = tokenMatch[1];
-  return await verifyJwt(token, env);
+    const token = tokenMatch[1];
+    if (!token) return null;
+    
+    return await verifyJwt(token, env);
+  } catch (error) {
+    await logError(error, env, 'GetAuth');
+    return null;
+  }
 }
 
 // 요청에서 사용자 정보 가져오기

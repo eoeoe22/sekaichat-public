@@ -8,12 +8,12 @@ let autoCallInProgress = false;
 let currentWorkMode = false;
 let currentShowTime = true;
 let currentSituationPrompt = '';
-let showMarkdown = false;
+let showMarkdown = true;
 let imageGenerationEnabled = false;
 let affectionSystemEnabled = false;
 let autoragMemoryEnabled = false;
-let autoReplyModeEnabled = false;
-let continuousResponseEnabled = true; // 기본값은 true (연속응답 활성화)
+let autoReplyModeEnabled = true;
+let continuousResponseEnabled = false; // 기본값은 false (연속응답 비활성화)
 let awaitingUserMessageResponse = false;
 let proModeEnabled = false;
 let generationAbortController = null;
@@ -24,7 +24,7 @@ function showSnackbar(message, type = 'info') { // type: 'info', 'warning', 'suc
     const snackbar = document.getElementById('snackbar');
     if (!snackbar) return;
     snackbar.textContent = message;
-    
+
     snackbar.classList.remove('warning', 'success');
     if (type === 'warning') {
         snackbar.classList.add('warning');
@@ -51,13 +51,13 @@ async function handleTTS(characterNameCode, messageText, messageId) {
 
     try {
         const cleanText = stripMarkdown(messageText).replace(/\s+/g, ' ').trim();
-        
+
         if (!cleanText) {
             throw new Error('음성으로 변환할 텍스트가 없습니다.');
         }
 
         const maxLength = 200;
-        const baseText = cleanText.length > maxLength ? 
+        const baseText = cleanText.length > maxLength ?
             cleanText.substring(0, maxLength) + '...' : cleanText;
 
         let processedText = await processTextForTTS(baseText);
@@ -82,19 +82,19 @@ async function handleTTS(characterNameCode, messageText, messageId) {
         const audioBlob = await response.blob();
         const audioUrl = URL.createObjectURL(audioBlob);
         const audio = new Audio(audioUrl);
-        
+
         audio.onerror = () => {
             URL.revokeObjectURL(audioUrl);
             showSnackbar('오디오 재생에 실패했습니다.', 'warning');
         };
-        
+
         audio.onended = () => {
             URL.revokeObjectURL(audioUrl);
         };
-        
+
         await audio.play();
         showSnackbar('TTS 생성 완료!', 'success');
-        
+
     } catch (error) {
         console.error('TTS 오류:', error);
         showSnackbar(error.message, 'warning');
@@ -234,7 +234,7 @@ function updateStartConversationPanel() {
     const panel = document.getElementById('startConversationPanel');
     const chatMessages = document.getElementById('chatMessages');
     const chatInput = document.querySelector('.chat-input');
-    
+
     if (!currentConversationId) {
         if (panel) panel.style.display = 'flex';
         if (chatMessages) chatMessages.style.display = 'none';
@@ -335,7 +335,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (window.initializeUserCharacters) {
             try { await window.initializeUserCharacters(); } catch(e){ console.error(e); }
         }
-        
+
 
         // 기존 loadConversations 래핑
         setTimeout(() => {
@@ -516,7 +516,6 @@ function handleImageGenerationToggle(e) {
 // 이벤트 리스너 설정
 function setupEventListeners() {
     document.getElementById('sendButton').addEventListener('click', () => sendMessage('user'));
-    document.getElementById('situationButton').addEventListener('click', () => sendMessage('situation'));
     document.getElementById('messageInput').addEventListener('keypress', e => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -532,6 +531,17 @@ function setupEventListeners() {
     });
     document.getElementById('imageInput').addEventListener('change', handleImageUpload);
     document.getElementById('inviteCharacterBtn').addEventListener('click', showInviteModal);
+
+    // Image preview event listeners
+    document.getElementById('cancelImageBtn').addEventListener('click', hideImagePreview);
+    document.getElementById('confirmImageBtn').addEventListener('click', confirmImageUpload);
+    document.getElementById('editImageBtn').addEventListener('click', () => {
+        if (selectedImageFile) {
+            initializeImageEditor(selectedImageFile);
+            const editorModal = new bootstrap.Modal(document.getElementById('imageEditorModal'));
+            editorModal.show();
+        }
+    });
 
     const modalSettingsContent = document.getElementById('modalSettingsContent');
     const headerControlsContent = document.getElementById('headerControlsContent');
@@ -556,7 +566,7 @@ function setupEventListeners() {
     document.getElementById('situationPromptBtn').addEventListener('click', showSituationPromptModal);
     document.getElementById('saveSituationBtn').addEventListener('click', saveSituationPrompt);
     document.getElementById('clearSituationBtn').addEventListener('click', clearSituationPrompt);
-    
+
 
 
     const mdToggle = document.getElementById('markdownToggle');
@@ -687,9 +697,9 @@ function showSituationPromptModal() {
     const modal = new bootstrap.Modal(document.getElementById('situationPromptModal'));
     const input = document.getElementById('situationPromptInput');
     input.value = currentSituationPrompt;
-    
 
-    
+
+
     modal.show();
     setTimeout(() => input.focus(), 300);
 }
@@ -728,17 +738,17 @@ async function handleAffectionToggle(e) {
         alert('먼저 대화를 시작해주세요.');
         return;
     }
-    
+
     try {
         const response = await fetch('/api/affection/toggle', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                conversationId: currentConversationId, 
-                useAffectionSys 
+                conversationId: currentConversationId,
+                useAffectionSys
             })
         });
-        
+
         if (response.ok) {
             affectionSystemEnabled = useAffectionSys;
             updateAffectionUI();
@@ -765,17 +775,17 @@ async function handleAutoragMemoryToggle(e) {
         alert('먼저 대화를 시작해주세요.');
         return;
     }
-    
+
     try {
         const response = await fetch('/api/conversations/autorag-memory', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                conversationId: currentConversationId, 
-                useAutoragMemory 
+                conversationId: currentConversationId,
+                useAutoragMemory
             })
         });
-        
+
         if (response.ok) {
             autoragMemoryEnabled = useAutoragMemory;
             if (useAutoragMemory) {
@@ -797,7 +807,7 @@ async function handleAutoragMemoryToggle(e) {
 async function handleAutoReplyToggle(e) {
     const isEnabled = e.target.checked;
     autoReplyModeEnabled = isEnabled;
-    
+
     // 연속응답 체크박스 표시/숨김
     const continuousContainer = document.getElementById('continuousResponseContainer');
     if (isEnabled) {
@@ -805,7 +815,7 @@ async function handleAutoReplyToggle(e) {
     } else {
         continuousContainer.style.display = 'none';
     }
-    
+
     if (!currentConversationId) return;
     try {
         await fetch(`/api/conversations/${currentConversationId}/auto-reply-mode`, {
@@ -835,10 +845,10 @@ async function showAffectionModal() {
         alert('먼저 대화를 시작해주세요.');
         return;
     }
-    
+
     const modal = new bootstrap.Modal(document.getElementById('affectionModal'));
     modal.show();
-    
+
     // 호감도 상태 로드
     await loadAffectionStatus();
 }
@@ -862,20 +872,20 @@ async function loadAffectionStatus() {
 function updateAffectionModal(data) {
     const statusDiv = document.getElementById('affectionSystemStatus');
     const characterList = document.getElementById('affectionCharacterList');
-    
+
     if (!data.use_affection_sys) {
         statusDiv.innerHTML = `<div class=\"alert alert-info\"><i class=\"bi bi-info-circle\"></i> 호감도 시스템이 비활성화되어 있습니다.</div>`;
         characterList.innerHTML = '';
         return;
     }
-    
+
     statusDiv.innerHTML = `<div class=\"alert alert-success\"><i class=\"bi bi-check-circle\"></i> 호감도 시스템이 활성화되어 있습니다.</div>`;
-    
+
     if (data.participants.length === 0) {
         characterList.innerHTML = `<div class=\"text-center py-4 text-muted\"><i class=\"bi bi-person-plus fs-2\"></i><p class=\"mt-2\">대화에 참여한 캐릭터가 없습니다.</p></div>`;
         return;
     }
-    
+
     characterList.innerHTML = '';
     data.participants.forEach(p => {
         const level = p.affection_level ?? 0;
@@ -885,14 +895,14 @@ function updateAffectionModal(data) {
         const characterDiv = document.createElement('div');
         characterDiv.className = 'character-affection-item';
         characterDiv.innerHTML = `
-            <img src="${p.profile_image}" alt="${escapeHtml(p.name)}" class="character-affection-avatar" onerror="this.src='/images/characters/kanade.webp'">
+            <img src="${p.profile_image}" alt="${escapeHtml(p.name)}" class="character-affection-avatar" onerror="this.src='/images/characters/default.webp'">
             <div class="character-affection-info">
                 <div class="character-affection-name">${escapeHtml(p.name)}</div>
                 <div class="character-affection-level">${getAffectionLevelText(level, type)}</div>
                 <div class="affection-type-group mt-2">
-                    <button class="btn btn-sm ${type === 'friendship' ? 'btn-primary' : 'btn-outline-primary'} ${isTypeSelectionDisabled ? 'disabled' : ''}" 
+                    <button class="btn btn-sm ${type === 'friendship' ? 'btn-primary' : 'btn-outline-primary'} ${isTypeSelectionDisabled ? 'disabled' : ''}"
                             onclick="updateAffectionType(this, 'friendship', ${p.character_id}, '${p.character_type}')">우정</button>
-                    <button class="btn btn-sm ${type === 'love' ? 'btn-danger' : 'btn-outline-danger'} ${isTypeSelectionDisabled ? 'disabled' : ''}" 
+                    <button class="btn btn-sm ${type === 'love' ? 'btn-danger' : 'btn-outline-danger'} ${isTypeSelectionDisabled ? 'disabled' : ''}"
                             onclick="updateAffectionType(this, 'love', ${p.character_id}, '${p.character_type}')">애정</button>
                 </div>
             </div>
@@ -922,10 +932,10 @@ function getAffectionLevelText(level, type) {
     if (level < -50) return '최악';
     if (level < -20) return '부정적';
     if (level < -10) return '약간 부정적';
-    
+
     // 중립 범위 (-10 ~ +10)
     if (level >= -10 && level <= 10) return '중립';
-    
+
     // 양수 범위 - 3단계 (우정/애정 분리 유지)
     if (level < 30) return type === 'love' ? '약간 호감 (애정)' : '약간 긍정 (우정)';
     if (level < 70) return type === 'love' ? '긍정적 (애정)' : '긍정적 (우정)';
@@ -949,7 +959,7 @@ async function adjustAffection(characterId, characterType, amount) {
 
     // 값 범위 제한
     newValue = Math.max(-100, Math.min(100, newValue));
-    
+
     await updateAffectionLevel(characterId, characterType, newValue);
 }
 
@@ -961,7 +971,7 @@ function enableAffectionInput(span, characterId, characterType) {
     input.value = currentValue;
     input.min = -100;
     input.max = 100;
-    
+
     span.style.display = 'none';
     span.parentNode.insertBefore(input, span.nextSibling);
     input.focus();
@@ -972,10 +982,10 @@ function enableAffectionInput(span, characterId, characterType) {
             newValue = currentValue;
         }
         newValue = Math.max(-100, Math.min(100, newValue));
-        
+
         input.remove();
         span.style.display = '';
-        
+
         await updateAffectionLevel(characterId, characterType, newValue);
     };
 
@@ -1001,7 +1011,7 @@ async function updateAffectionLevel(characterId, characterType, affectionLevel) 
             await loadAffectionStatus();
             return;
         }
-        
+
         // 성공 후 상태 다시 로드 (서버 값으로 최종 동기화)
         await loadAffectionStatus();
     } catch (error) {
@@ -1049,7 +1059,7 @@ function updateAffectionUI() {
 // 호감도 시스템 상태 로드 (대화 로드 시 호출)
 async function loadAffectionSystemState() {
     if (!currentConversationId) return;
-    
+
     try {
         const response = await fetch(`/api/conversations/${currentConversationId}/affection`);
         if (response.ok) {
@@ -1080,6 +1090,12 @@ async function loadUserInfo() {
         if (response.ok) {
             userInfo = await response.json();
             window.userInfo = userInfo;
+
+            // API 키 형식 검증 결과 확인 및 경고 표시
+            if (userInfo.has_api_key && !userInfo.api_key_valid) {
+                showSnackbar(`API 키 형식 오류: ${userInfo.api_key_error}`, 'warning');
+            }
+
             updateImageUploadButton();
             if (!globalLoadingState.user) {
                 globalLoadingState.user = true;
@@ -1159,7 +1175,7 @@ async function loadConversation(id) {
             document.getElementById('workModeToggle').checked = currentWorkMode;
             document.getElementById('showTimeToggle').checked = currentShowTime;
             document.getElementById('autoReplyToggle').checked = autoReplyModeEnabled;
-            
+
             // 자동 답변 모드 상태에 따라 연속응답 체크박스 표시/숨김
             const continuousContainer = document.getElementById('continuousResponseContainer');
             if (autoReplyModeEnabled) {
@@ -1167,7 +1183,7 @@ async function loadConversation(id) {
             } else {
                 continuousContainer.style.display = 'none';
             }
-            
+
             const autoragToggle = document.getElementById('autoragMemoryToggle');
             if (autoragToggle) autoragToggle.checked = autoragMemoryEnabled;
             updateWorkModeUI(currentWorkMode);
@@ -1235,9 +1251,9 @@ async function sendMessage(role = 'user') {
 
     if (!currentConversationId) {
         await startNewConversation();
-        if (!currentConversationId) { 
-            alert('대화 생성 실패'); 
-            return; 
+        if (!currentConversationId) {
+            alert('대화 생성 실패');
+            return;
         }
     }
 
@@ -1294,11 +1310,10 @@ async function generateCharacterResponse(characterId) {
 
     const character = currentCharacters.find(c => c.id === characterId) ||
         availableCharacters.find(c => c.id === characterId);
-    let loadingMessage = '...';
-    if (imageGenerationEnabled && supportsImageGeneration(characterId, character?.type || 'official')) {
-        loadingMessage = '... 🎨';
-    }
-    const loadingBubble = addMessage('assistant', loadingMessage, character?.name, character?.profile_image);
+
+    // 항상 텍스트 로딩 버블로 시작
+    const loadingBubble = addMessage('assistant', '...', character?.name, character?.profile_image);
+
     try {
         let selectedModel = 'gemini-2.5-flash';
         if (currentWorkMode && proModeEnabled) {
@@ -1327,42 +1342,58 @@ async function generateCharacterResponse(characterId) {
             body: JSON.stringify(requestBody),
             signal
         });
+
+        // 텍스트 로딩 버블은 항상 제거
+        if (loadingBubble) {
+            const el = loadingBubble.closest('.message');
+            if (el) el.remove();
+        }
+
         if (response.ok) {
             const data = await response.json();
-            if (loadingBubble) {
-                const el = loadingBubble.closest('.message');
-                if (el) el.remove();
-            }
+
+            // 1. 텍스트 메시지가 있으면 먼저 표시
             if (data.newMessage) {
                 addMessage('assistant', data.newMessage.content, character?.name, character?.profile_image, data.newMessage.auto_call_sequence, data.newMessage.id);
             }
+
+            // 2. 생성할 이미지가 있으면, 이미지 로딩 버블을 표시
             if (data.generatedImages && data.generatedImages.length > 0) {
                 setImageGenerationCooldown();
-                for (const image of data.generatedImages) {
-                    addImageMessage('assistant', image.filename, image.url, image.id);
-                }
-            } else if (imageGenerationEnabled) {
+                const imageLoadingBubble = addImageLoadingPlaceholder(character?.name, character?.profile_image);
+
+                // 3. 잠시 후 이미지 로딩 버블을 실제 이미지로 교체
+                setTimeout(() => {
+                    if (imageLoadingBubble) {
+                        const el = imageLoadingBubble.closest('.message');
+                        if (el) el.remove();
+                    }
+                    data.generatedImages.forEach(image => {
+                        addImageMessage('assistant', image.filename, image.url, image.id, character?.name, character?.profile_image);
+                    });
+                }, 1200); // 1.2초 지연으로 시뮬레이션
+
+            } else if (data.imageGenerationAttempted && !data.newMessage) {
+                // 텍스트 메시지 없이 이미지 생성만 시도했다가 실패한 경우
                 addMessage('system', '이미지 생성에 실패했습니다.');
             }
+
             awaitingResponse = false;
             if (window.loadConversations) await window.loadConversations();
+
         } else if (response.status === 401) {
             window.location.href = '/login';
         } else {
-            if (loadingBubble) {
-                const el = loadingBubble.closest('.message');
-                if (el) el.remove();
-            }
             showErrorModal(GEMINI_ERROR_GUIDANCE);
         }
     } catch (err) {
         if (err.name === 'AbortError') {
             console.log('Character response generation aborted.');
-            if (loadingBubble) {
+            if (loadingBubble) { // Abort 시에도 로딩 버블 제거
                 const el = loadingBubble.closest('.message');
                 if (el) el.remove();
             }
-            return; 
+            return;
         }
         console.error('캐릭터 응답 생성 오류:', err);
         if (loadingBubble) {
@@ -1425,7 +1456,7 @@ async function triggerAutoReply() {
 
             // 2. Show loading bubble
             const loadingBubble = addMessage('assistant', '...', speaker.name, speaker.profile_image);
-            
+
             // 3. Generate the actual message
             console.log(`[Auto-Reply] Generating message for ${speaker.name}...`);
             let selectedModel = 'gemini-2.5-flash';
@@ -1474,7 +1505,7 @@ async function triggerAutoReply() {
             } else {
                 console.warn('[Auto-Reply] No newMessage found in generation response.');
             }
-            
+
             if (generationData.generatedImages && generationData.generatedImages.length > 0) {
                 setImageGenerationCooldown();
                 // Only update character profiles, don't display images (they're now persisted in DB)
@@ -1484,7 +1515,7 @@ async function triggerAutoReply() {
             }
 
             autoCallCount++;
-            
+
             // Small delay between auto-replies
             await new Promise(resolve => setTimeout(resolve, 500));
         }
@@ -1634,83 +1665,546 @@ async function startNewConversation() {
 }
 
 // 이미지 업로드 처리
+// Image preview variables
+let selectedImageFile = null;
+let editedImageData = null;
+let imageEditorCanvas = null;
+let imageEditorCtx = null;
+let originalImageData = null;
+let currentRotation = 0;
+let cropMode = false;
+let cropStartX = 0;
+let cropStartY = 0;
+let cropEndX = 0;
+let cropEndY = 0;
+let cropSelection = null;
+
 async function handleImageUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
+
     if (!userInfo.has_api_key) {
         alert('이미지 업로드는 개인 Gemini API 키가 등록된 사용자만 이용할 수 있습니다.');
         return;
     }
+
     if (!validateImageFile(file)) {
         alert('지원하지 않는 형식이거나 5MB 초과입니다.');
         return;
     }
+
+    // Show image preview instead of immediate upload
+    showImagePreview(file);
+
+    // Clear the input
+    event.target.value = '';
+}
+
+// Show image preview
+function showImagePreview(file) {
+    selectedImageFile = file;
+    editedImageData = null;
+
+    const previewContainer = document.getElementById('imagePreviewContainer');
+    const previewImg = document.getElementById('imagePreview');
+    const previewName = document.getElementById('imagePreviewName');
+    const previewSize = document.getElementById('imagePreviewSize');
+
+    // Create object URL for preview
+    const objectUrl = URL.createObjectURL(file);
+    previewImg.src = objectUrl;
+    previewName.textContent = file.name;
+    previewSize.textContent = formatFileSize(file.size);
+
+    previewContainer.style.display = 'block';
+
+    // Scroll to preview
+    previewContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// Hide image preview
+function hideImagePreview() {
+    const previewContainer = document.getElementById('imagePreviewContainer');
+    const previewImg = document.getElementById('imagePreview');
+
+    previewContainer.style.display = 'none';
+
+    // Clean up object URL
+    if (previewImg.src.startsWith('blob:')) {
+        URL.revokeObjectURL(previewImg.src);
+    }
+
+    selectedImageFile = null;
+    editedImageData = null;
+}
+
+// Format file size
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Initialize image editor
+function initializeImageEditor(file) {
+    imageEditorCanvas = document.getElementById('imageEditorCanvas');
+    imageEditorCtx = imageEditorCanvas.getContext('2d');
+
+    const img = new Image();
+    img.onload = function() {
+        // Set canvas size maintaining aspect ratio
+        const maxWidth = 600;
+        const maxHeight = 400;
+        let { width, height } = img;
+
+        if (width > maxWidth || height > maxHeight) {
+            const ratio = Math.min(maxWidth / width, maxHeight / height);
+            width *= ratio;
+            height *= ratio;
+        }
+
+        imageEditorCanvas.width = width;
+        imageEditorCanvas.height = height;
+
+        // Store original image data
+        originalImageData = {
+            img: img,
+            width: width,
+            height: height
+        };
+
+        // Reset editor state
+        resetEditor();
+        drawImage();
+
+        // Setup event listeners for editor controls
+        setupImageEditorControls();
+    };
+
+    img.src = URL.createObjectURL(file);
+}
+
+// Setup image editor controls
+function setupImageEditorControls() {
+    const rotateLeftBtn = document.getElementById('rotateLeftBtn');
+    const rotateRightBtn = document.getElementById('rotateRightBtn');
+    const cropModeBtn = document.getElementById('cropModeBtn');
+    const applyCropBtn = document.getElementById('applyCropBtn');
+    const resetEditorBtn = document.getElementById('resetEditorBtn');
+    const applyEditorBtn = document.getElementById('applyEditorBtn');
+
+    // Remove existing event listeners to prevent duplicates
+    rotateLeftBtn.replaceWith(rotateLeftBtn.cloneNode(true));
+    rotateRightBtn.replaceWith(rotateRightBtn.cloneNode(true));
+    cropModeBtn.replaceWith(cropModeBtn.cloneNode(true));
+    applyCropBtn.replaceWith(applyCropBtn.cloneNode(true));
+    resetEditorBtn.replaceWith(resetEditorBtn.cloneNode(true));
+    applyEditorBtn.replaceWith(applyEditorBtn.cloneNode(true));
+
+    // Re-get elements after replacement
+    const newRotateLeftBtn = document.getElementById('rotateLeftBtn');
+    const newRotateRightBtn = document.getElementById('rotateRightBtn');
+    const newCropModeBtn = document.getElementById('cropModeBtn');
+    const newApplyCropBtn = document.getElementById('applyCropBtn');
+    const newResetEditorBtn = document.getElementById('resetEditorBtn');
+    const newApplyEditorBtn = document.getElementById('applyEditorBtn');
+
+    newRotateLeftBtn.addEventListener('click', () => {
+        currentRotation -= 90;
+        drawImage();
+    });
+
+    newRotateRightBtn.addEventListener('click', () => {
+        currentRotation += 90;
+        drawImage();
+    });
+
+    newCropModeBtn.addEventListener('click', () => {
+        toggleCropMode();
+    });
+
+    newApplyCropBtn.addEventListener('click', () => {
+        applyCrop();
+    });
+
+    newResetEditorBtn.addEventListener('click', () => {
+        resetEditor();
+        drawImage();
+    });
+
+    newApplyEditorBtn.addEventListener('click', () => {
+        applyEditorChanges();
+    });
+
+    // Add canvas event listeners for cropping
+    setupCanvasEventListeners();
+}
+
+// Reset editor state
+function resetEditor() {
+    currentRotation = 0;
+    cropMode = false;
+    clearCropSelection();
+    const cropModeBtn = document.getElementById('cropModeBtn');
+    const applyCropBtn = document.getElementById('applyCropBtn');
+    if (cropModeBtn) {
+        cropModeBtn.innerHTML = '<i class="bi bi-crop"></i> 크롭 영역 선택';
+        cropModeBtn.classList.remove('btn-warning');
+        cropModeBtn.classList.add('btn-outline-primary');
+    }
+    if (applyCropBtn) {
+        applyCropBtn.style.display = 'none';
+    }
+    if (imageEditorCanvas) {
+        imageEditorCanvas.classList.remove('crop-mode');
+    }
+}
+
+// Draw image with current transformations
+function drawImage() {
+    if (!originalImageData || !imageEditorCtx) return;
+
+    const { img, width, height } = originalImageData;
+
+    // Clear canvas
+    imageEditorCtx.clearRect(0, 0, imageEditorCanvas.width, imageEditorCanvas.height);
+
+    // Save context
+    imageEditorCtx.save();
+
+    // Apply transformations
+    imageEditorCtx.translate(imageEditorCanvas.width / 2, imageEditorCanvas.height / 2);
+    imageEditorCtx.rotate((currentRotation * Math.PI) / 180);
+
+    // Draw image
+    imageEditorCtx.drawImage(img, -width / 2, -height / 2, width, height);
+
+    // Restore context
+    imageEditorCtx.restore();
+}
+
+// Toggle crop mode
+function toggleCropMode() {
+    cropMode = !cropMode;
+    const cropModeBtn = document.getElementById('cropModeBtn');
+    const applyCropBtn = document.getElementById('applyCropBtn');
+
+    if (cropMode) {
+        cropModeBtn.innerHTML = '<i class="bi bi-x-circle"></i> 크롭 취소';
+        cropModeBtn.classList.remove('btn-outline-primary');
+        cropModeBtn.classList.add('btn-warning');
+        imageEditorCanvas.classList.add('crop-mode');
+        clearCropSelection();
+    } else {
+        cropModeBtn.innerHTML = '<i class="bi bi-crop"></i> 크롭 영역 선택';
+        cropModeBtn.classList.remove('btn-warning');
+        cropModeBtn.classList.add('btn-outline-primary');
+        imageEditorCanvas.classList.remove('crop-mode');
+        clearCropSelection();
+        applyCropBtn.style.display = 'none';
+    }
+}
+
+// Setup canvas event listeners for cropping
+function setupCanvasEventListeners() {
+    if (!imageEditorCanvas) return;
+
+    let isDrawing = false;
+
+    const getMousePos = (canvas, evt) => {
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: evt.clientX - rect.left,
+            y: evt.clientY - rect.top
+        };
+    };
+
+    const getTouchPos = (canvas, touch) => {
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: touch.clientX - rect.left,
+            y: touch.clientY - rect.top
+        };
+    };
+
+    const startDrawing = (pos) => {
+        if (!cropMode) return;
+        cropStartX = pos.x;
+        cropStartY = pos.y;
+        isDrawing = true;
+        clearCropSelection();
+    };
+
+    const draw = (pos) => {
+        if (!cropMode || !isDrawing) return;
+        cropEndX = pos.x;
+        cropEndY = pos.y;
+        updateCropSelection();
+    };
+
+    const stopDrawing = (pos) => {
+        if (!cropMode || !isDrawing) return;
+        isDrawing = false;
+        cropEndX = pos.x;
+        cropEndY = pos.y;
+        updateCropSelection();
+
+        const applyCropBtn = document.getElementById('applyCropBtn');
+        if (applyCropBtn && Math.abs(cropEndX - cropStartX) > 10 && Math.abs(cropEndY - cropStartY) > 10) {
+            applyCropBtn.style.display = 'inline-block';
+        }
+    };
+
+    // Mouse events
+    imageEditorCanvas.addEventListener('mousedown', (e) => {
+        const pos = getMousePos(imageEditorCanvas, e);
+        startDrawing(pos);
+        e.preventDefault();
+    });
+
+    imageEditorCanvas.addEventListener('mousemove', (e) => {
+        const pos = getMousePos(imageEditorCanvas, e);
+        draw(pos);
+        e.preventDefault();
+    });
+
+    imageEditorCanvas.addEventListener('mouseup', (e) => {
+        const pos = getMousePos(imageEditorCanvas, e);
+        stopDrawing(pos);
+        e.preventDefault();
+    });
+
+    // Touch events
+    imageEditorCanvas.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+            const pos = getTouchPos(imageEditorCanvas, e.touches[0]);
+            startDrawing(pos);
+            e.preventDefault();
+        }
+    });
+
+    imageEditorCanvas.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 1) {
+            const pos = getTouchPos(imageEditorCanvas, e.touches[0]);
+            draw(pos);
+            e.preventDefault();
+        }
+    });
+
+    imageEditorCanvas.addEventListener('touchend', (e) => {
+        if (e.changedTouches.length === 1) {
+            const pos = getTouchPos(imageEditorCanvas, e.changedTouches[0]);
+            stopDrawing(pos);
+            e.preventDefault();
+        }
+    });
+}
+
+// Update crop selection overlay
+function updateCropSelection() {
+    clearCropSelection();
+
+    if (!cropMode) return;
+
+    const container = imageEditorCanvas.parentElement;
+    const rect = imageEditorCanvas.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+
+    const x = Math.min(cropStartX, cropEndX);
+    const y = Math.min(cropStartY, cropEndY);
+    const width = Math.abs(cropEndX - cropStartX);
+    const height = Math.abs(cropEndY - cropStartY);
+
+    if (width < 5 || height < 5) return;
+
+    cropSelection = document.createElement('div');
+    cropSelection.className = 'crop-selection';
+    cropSelection.style.left = (rect.left - containerRect.left + x) + 'px';
+    cropSelection.style.top = (rect.top - containerRect.top + y) + 'px';
+    cropSelection.style.width = width + 'px';
+    cropSelection.style.height = height + 'px';
+
+    container.appendChild(cropSelection);
+}
+
+// Clear crop selection
+function clearCropSelection() {
+    if (cropSelection) {
+        cropSelection.remove();
+        cropSelection = null;
+    }
+}
+
+// Apply crop to image
+function applyCrop() {
+    if (!cropMode || !originalImageData) return;
+
+    const x = Math.min(cropStartX, cropEndX);
+    const y = Math.min(cropStartY, cropEndY);
+    const width = Math.abs(cropEndX - cropStartX);
+    const height = Math.abs(cropEndY - cropStartY);
+
+    if (width < 10 || height < 10) {
+        alert('크롭 영역이 너무 작습니다.');
+        return;
+    }
+
+    // Create temporary canvas for cropping
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+
+    // Set temp canvas size to crop dimensions
+    tempCanvas.width = width;
+    tempCanvas.height = height;
+
+    // Draw the cropped area from the current canvas state
+    tempCtx.drawImage(imageEditorCanvas, x, y, width, height, 0, 0, width, height);
+
+    // Update main canvas with cropped image
+    imageEditorCanvas.width = width;
+    imageEditorCanvas.height = height;
+    imageEditorCtx.drawImage(tempCanvas, 0, 0);
+
+    // Update original image data
+    const croppedImage = new Image();
+    croppedImage.onload = function() {
+        originalImageData = {
+            img: croppedImage,
+            width: width,
+            height: height
+        };
+        currentRotation = 0; // Reset rotation after crop
+        toggleCropMode(); // Exit crop mode
+        drawImage(); // Redraw the image
+    };
+    croppedImage.src = tempCanvas.toDataURL();
+}
+
+// Apply editor changes
+function applyEditorChanges() {
+    // Convert canvas to blob
+    imageEditorCanvas.toBlob((blob) => {
+        // Create new file from edited image
+        const editedFile = new File([blob], selectedImageFile.name, {
+            type: selectedImageFile.type,
+            lastModified: Date.now()
+        });
+
+        editedImageData = editedFile;
+
+        // Update preview with edited image
+        const previewImg = document.getElementById('imagePreview');
+        previewImg.src = URL.createObjectURL(editedFile);
+
+        // Close editor modal
+        bootstrap.Modal.getInstance(document.getElementById('imageEditorModal')).hide();
+    }, selectedImageFile.type, 0.9);
+}
+
+// Confirm image upload
+async function confirmImageUpload() {
+    const fileToUpload = editedImageData || selectedImageFile;
+
     if (!currentConversationId) {
         await startNewConversation();
-        if (!currentConversationId) { alert('대화방 생성 실패'); return; }
+        if (!currentConversationId) {
+            alert('대화방 생성 실패');
+            return;
+        }
     }
+
     const uploadModal = new bootstrap.Modal(document.getElementById('uploadModal'));
+
     try {
         uploadModal.show();
+
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('file', fileToUpload);
         formData.append('conversationId', currentConversationId);
-        const uploadResponse = await fetch('/api/upload/direct', { method: 'POST', body: formData });
+
+        const uploadResponse = await fetch('/api/upload/direct', {
+            method: 'POST',
+            body: formData
+        });
+
         if (!uploadResponse.ok) throw new Error('업로드 실패');
+
         const { imageUrl, fileName } = await uploadResponse.json();
-        const base64Data = await fileToBase64(file);
+        const base64Data = await fileToBase64(fileToUpload);
+
         lastUploadedImageData = {
             base64Data,
-            mimeType: file.type,
-            fileName: file.name
+            mimeType: fileToUpload.type,
+            fileName: fileToUpload.name
         };
-        const cleanFileName = removeUnicodeEmojis(file.name);
+
+        const cleanFileName = removeUnicodeEmojis(fileToUpload.name);
         addImageMessage('user', cleanFileName, imageUrl);
+
         if (window.loadConversations) await window.loadConversations();
         addMessage('system', '이미지가 업로드되었습니다. 메시지를 입력하면 캐릭터가 이미지를 참고합니다.');
+
+        // Hide preview
+        hideImagePreview();
+
     } catch (e) {
         console.error(e);
         alert('업로드 실패');
     } finally {
         uploadModal.hide();
-        event.target.value = '';
     }
 }
-
-// 이미지 메시지 추가
-function addImageMessage(role, fileName, imageUrl, messageId = null) {
+function addImageMessage(role, fileName, imageUrl, messageId = null, characterName = null, characterImage = null) {
     const messagesDiv = document.getElementById('chatMessages');
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${role}`;
     const cleanFileName = removeUnicodeEmojis(fileName);
     const escapedFileName = escapeHtml(cleanFileName);
+
+    // Create image control buttons (expand, download, delete)
+    const expandButtonHtml = `<button class="image-expand-btn" onclick="expandImage('${imageUrl}', '${escapedFileName}')" title="이미지 확대">
+        <i class="bi bi-arrows-fullscreen"></i>
+    </button>`;
+
+    const downloadButtonHtml = `<button class="image-download-btn" onclick="downloadImage('${imageUrl}', '${escapedFileName}')" title="이미지 다운로드">
+        <i class="bi bi-download"></i>
+    </button>`;
+
     const deleteButtonHtml = messageId ?
-        `<div class="message-delete-wrapper">
-            <button class="message-delete-btn" onclick="deleteMessage(${messageId}, this.closest('.message'))" title="메시지 삭제">
-                <i class="bi bi-trash-fill"></i>
-            </button>
-         </div>` : '';
+        `<button class="message-delete-btn" onclick="deleteMessage(${messageId}, this.closest('.message'))" title="메시지 삭제">
+            <i class="bi bi-trash-fill"></i>
+        </button>` : '';
+
+    // Create consistent message-actions structure for both user and assistant
+    const imageActionsHtml = `<div class="message-actions">
+        ${expandButtonHtml}
+        ${downloadButtonHtml}
+        ${deleteButtonHtml}
+    </div>`;
+
     if (role === 'user') {
         messageDiv.innerHTML = `
             <div class="message-content">
                 <div class="image-message">
-                    <img src="${imageUrl}" alt="${escapedFileName}" class="uploaded-image">
+                    <img src="${imageUrl}" alt="${escapedFileName}" class="uploaded-image" onclick="expandImage('${imageUrl}', '${escapedFileName}')" style="cursor: pointer;">
                     <div class="image-info">${escapedFileName}</div>
                 </div>
-                ${deleteButtonHtml}
+                ${imageActionsHtml}
             </div>`;
     } else {
-        const avatarSrc = '/images/characters/ena.webp';
-        const avatarAlt = '에나';
-        
+        const avatarSrc = characterImage || '/images/characters/ena.webp';
+        const avatarAlt = characterName || '에나';
+
         messageDiv.innerHTML = `
-            <img src="${avatarSrc}" alt="${avatarAlt}" class="message-avatar">
+            <img src="${avatarSrc}" alt="${escapeHtml(avatarAlt)}" class="message-avatar" onerror="this.src='/images/characters/kanade.webp'">
             <div class="message-content">
                 <div class="image-message">
-                    <img src="${imageUrl}" alt="${escapedFileName}" class="uploaded-image">
+                    <img src="${imageUrl}" alt="${escapedFileName}" class="uploaded-image" onclick="expandImage('${imageUrl}', '${escapedFileName}')" style="cursor: pointer;">
                     <div class="image-info">${escapedFileName}</div>
                 </div>
-                ${deleteButtonHtml}
+                ${imageActionsHtml}
             </div>`;
     }
     messagesDiv.appendChild(messageDiv);
@@ -1737,9 +2231,9 @@ async function deleteMessage(messageId, messageElement) {
 function createCustomEmojiHTML(emojiFileName) {
     const emojiId = `emoji_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     return `<div class="custom-emoji" id="container_${emojiId}">
-        <img src="/images/emojis/${emojiFileName}" 
-             alt="emoji" 
-             class="emoji-image" 
+        <img src="/images/emojis/${emojiFileName}"
+             alt="emoji"
+             class="emoji-image"
              id="${emojiId}"
              onerror="handleEmojiLoadError('${emojiId}')">
     </div>`;
@@ -1767,14 +2261,14 @@ function parseCustomEmoji(content) {
 // TTS support helper function
 function getCharacterTTSInfo(characterName) {
     if (!characterName) return null;
-    
+
     // Find character in available characters list
-    const character = availableCharacters.find(char => 
-        char.name === characterName && 
-        char.sekai === '프로젝트 세카이' && 
+    const character = availableCharacters.find(char =>
+        char.name === characterName &&
+        char.sekai === '프로젝트 세카이' &&
         char.name_code
     );
-    
+
     return character ? { name_code: character.name_code } : null;
 }
 
@@ -1782,24 +2276,49 @@ function getCharacterTTSInfo(characterName) {
 function createTTSButton(characterName, messageText, messageId) {
     const ttsInfo = getCharacterTTSInfo(characterName);
     if (!ttsInfo) return '';
-    
+
     // Safely escape text for onclick handler - properly escape for JavaScript strings in HTML attributes
     function escapeForJSString(text) {
         return text
             .replace(/\\/g, '\\\\')  // Escape backslashes first
             .replace(/'/g, "\\'")    // Escape single quotes
-            .replace(/"/g, '\\"')    // Escape double quotes  
+            .replace(/"/g, '\\"')    // Escape double quotes
             .replace(/\n/g, '\\n')   // Escape newlines
             .replace(/\r/g, '\\r')   // Escape carriage returns
             .replace(/\t/g, '\\t');  // Escape tabs
     }
-    
+
     const escapedNameCode = escapeForJSString(ttsInfo.name_code);
     const escapedText = escapeForJSString(messageText);
-    
+
     return `<button class="tts-button btn btn-sm btn-outline-primary" onclick="handleTTS('${escapedNameCode}', '${escapedText}', ${messageId || 'null'})" title="음성으로 듣기">
         <i class="bi bi-soundwave"></i>
     </button>`;
+}
+
+// 이미지 로딩 플레이스홀더 추가
+function addImageLoadingPlaceholder(characterName, characterImage) {
+    const messagesDiv = document.getElementById('chatMessages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message assistant image-loading-message'; // Special class to find it later
+
+    let avatarSrc = characterImage || '/images/characters/kanade.webp';
+    let altText = characterName || '캐릭터';
+
+    messageDiv.innerHTML = `
+        <img src="${avatarSrc}" alt="${escapeHtml(altText)}" class="message-avatar" onerror="this.src='/images/characters/kanade.webp'">
+        <div class="message-content">
+            <div class="message-bubble image-loading-placeholder">
+                <div class="image-loading-spinner-container">
+                    <div class="spinner-border" role="status"></div>
+                    <i class="bi bi-image"></i>
+                </div>
+            </div>
+        </div>`;
+
+    messagesDiv.appendChild(messageDiv);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    return messageDiv; // Return the element so it can be removed
 }
 
 // 메시지 추가
@@ -1839,19 +2358,19 @@ function addMessage(role, content, characterName = null, characterImage = null, 
         if (characterImage) avatarSrc = characterImage;
         if (characterName) altText = characterName;
 
-        // 변경: 로딩 표시 판별을 더 포괄적으로 처리하여
-        // '...', '... 🎨' 등으로 시작하는 모든 경우에 항상 placeholder-glow UI를 사용합니다.
         const isLoadingPlaceholder = typeof rawForMarkdown === 'string' && rawForMarkdown.trim().startsWith('...');
 
         if (isLoadingPlaceholder) {
-            // 항상 플레이스홀더 형태의 로딩 UI를 사용
+            // 로딩 UI: Bootstrap의 spinner-grow 애니메이션 사용
             messageDiv.innerHTML = `
                 <img src="${avatarSrc}" alt="${escapeHtml(altText)}" class="message-avatar" onerror="this.src='/images/characters/kanade.webp'">
                 <div class="message-content">
-                    <div class="message-bubble placeholder-glow" data-raw="${escapeHtml(rawForMarkdown).replace(/"/g,'&quot;')}" aria-live="polite" aria-label="답변 생성 중">
-                        <span class="placeholder col-9 mb-2" style="display:block; height:14px; border-radius:6px;"></span>
-                        <span class="placeholder col-7 mb-2" style="display:block; height:14px; border-radius:6px;"></span>
-                        <span class="placeholder col-8" style="display:block; height:14px; border-radius:6px;"></span>
+                    <div class="message-bubble has-placeholder" data-raw="${escapeHtml(rawForMarkdown).replace(/"/g,'&quot;')}" aria-live="polite" aria-label="답변 생성 중">
+                        <div class="d-flex justify-content-center align-items-center" style="height: 40px;">
+                            <div class="spinner-grow spinner-grow-sm" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
                     </div>
                 </div>`;
         } else {
@@ -2004,11 +2523,67 @@ async function processTextForTTS(text) {
         if (!result.translatedText) {
             throw new Error('처리된 텍스트를 받을 수 없습니다.');
         }
-        
+
         return result.translatedText;
     } catch (error) {
         console.error('TTS 텍스트 처리 중 오류 발생:', error);
         throw error; // 오류를 다시 던져서 TTS 실패 처리
+    }
+}
+
+// Image expand and download functions
+function expandImage(imageUrl, fileName) {
+    // Create modal for expanded image view
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.innerHTML = `
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-image"></i> ${escapeHtml(fileName)}
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
+                </div>
+                <div class="modal-body text-center p-0">
+                    <img src="${imageUrl}" alt="${escapeHtml(fileName)}" class="img-fluid" style="max-height: 70vh; width: auto;">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" onclick="downloadImage('${imageUrl}', '${fileName}')">
+                        <i class="bi bi-download"></i> 다운로드
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+                </div>
+            </div>
+        </div>`;
+
+    document.body.appendChild(modal);
+    const modalInstance = new bootstrap.Modal(modal);
+    modalInstance.show();
+
+    // Remove modal from DOM when hidden
+    modal.addEventListener('hidden.bs.modal', () => {
+        modal.remove();
+    });
+}
+
+function downloadImage(imageUrl, fileName) {
+    try {
+        // Create a temporary link element for download
+        const link = document.createElement('a');
+        link.href = imageUrl;
+        link.download = fileName || 'image.png';
+        link.target = '_blank';
+
+        // Trigger download
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        showSnackbar('이미지 다운로드를 시작합니다.', 'success');
+    } catch (error) {
+        console.error('이미지 다운로드 실패:', error);
+        showSnackbar('이미지 다운로드에 실패했습니다.', 'warning');
     }
 }
 
@@ -2024,4 +2599,7 @@ window.inviteCharacter = inviteCharacter;
 window.updateAffectionLevel = updateAffectionLevel;
 window.adjustAffection = adjustAffection;
 window.updateAffectionType = updateAffectionType;
+window.expandImage = expandImage;
+window.downloadImage = downloadImage;
+
 window.handleTTS = handleTTS;

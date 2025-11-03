@@ -25,7 +25,7 @@
     <div class="container settings-container my-5">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h2><i class="bi bi-gear-fill"></i> 개인 설정</h2>
-            <a href="/playground" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> 채팅으로 돌아가기</a>
+            <a href="/chat" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> 채팅으로 돌아가기</a>
         </div>
 
         <div class="row">
@@ -35,7 +35,7 @@
                     <button class="nav-link" id="v-pills-account-tab" data-bs-toggle="pill" data-bs-target="#v-pills-account" type="button" role="tab"><i class="bi bi-key-fill"></i> 계정</button>
                     <button class="nav-link" id="v-pills-characters-tab" data-bs-toggle="pill" data-bs-target="#v-pills-characters" type="button" role="tab"><i class="bi bi-person-heart"></i> 내 캐릭터</button>
                     <button class="nav-link" id="v-pills-chat-tab" data-bs-toggle="pill" data-bs-target="#v-pills-chat" type="button" role="tab"><i class="bi bi-chat-dots-fill"></i> 채팅 설정</button>
-                    <button class="nav-link" id="v-pills-sekai-tab" data-bs-toggle="pill" data-bs-target="#v-pills-sekai" type="button" role="tab"><i class="bi bi-globe"></i> 세계관 설정</button>
+                    <button class="nav-link" id="v-pills-sekai-tab" data-bs-toggle="pill" data-bs-target="#v-pills-sekai" type="button" role="tab"><i class="bi bi-globe"></i> 캐릭터 카테고리 관리</button>
                     <button class="nav-link" id="v-pills-api-tab" data-bs-toggle="pill" data-bs-target="#v-pills-api" type="button" role="tab"><i class="bi bi-code-slash"></i> API 키</button>
                     <button class="nav-link" id="v-pills-migration-tab" data-bs-toggle="pill" data-bs-target="#v-pills-migration" type="button" role="tab"><i class="bi bi-database-down"></i> 데이터 이전</button>
                 </div>
@@ -119,7 +119,7 @@
                                 <input type="number" id="maxAutoCall" class="form-control" min="1" max="10" value="3">
                             </div>
                             <button type="button" class="btn btn-primary" id="saveAutoCallBtn">저장</button>
-                            
+
                             <hr>
                             <h5><i class="bi bi-volume-up-fill"></i> TTS 언어 설정</h5>
                             <div class="mb-3">
@@ -127,7 +127,7 @@
                                 <div class="btn-group w-100" role="group" id="ttsLanguageGroup">
                                     <input type="radio" class="btn-check" name="ttsLanguage" id="ttsLanguageKr" value="kr">
                                     <label class="btn btn-outline-primary" for="ttsLanguageKr">한국어 (원본)</label>
-                                    
+
                                     <input type="radio" class="btn-check" name="ttsLanguage" id="ttsLanguageJp" value="jp" checked>
                                     <label class="btn btn-outline-primary" for="ttsLanguageJp">일본어 (번역)</label>
                                 </div>
@@ -144,7 +144,7 @@
                     <div class="tab-pane fade" id="v-pills-sekai" role="tabpanel">
                         <div class="form-section">
                             <h5><i class="bi bi-globe"></i> 세계관 필터링</h5>
-                            <p>캐릭터 초대 목록에 표시할 세계관을 선택하세요.</p>
+                            <p>캐릭터 초대 목록에 표시할 캐릭터 세계관을 선택하세요.</p>
                             <div id="sekaiFilterContainer"></div>
                             <button id="saveSekaiSettingsBtn" class="btn btn-primary mt-3">설정 저장</button>
                         </div>
@@ -153,7 +153,7 @@
                     <div class="tab-pane fade" id="v-pills-api" role="tabpanel">
                         <div class="form-section">
                             <h5><i class="bi bi-key-fill"></i> API 설정</h5>
-                            
+
                             <!-- Gemini API 키 설정 -->
                             <form id="apiKeyForm">
                                 <div class="mb-3">
@@ -205,7 +205,7 @@
                                     </div>
                                     <p id="migrationStatus"></p>
                                 </div>
-                                
+
                                 <div id="migrationResultSection" style="display: none;">
                                     <h6>이전 완료</h6>
                                     <p id="migrationResultMessage"></p>
@@ -238,7 +238,7 @@
                     </div>
                     <div class="form-group mb-3">
                         <label for="characterImage" class="form-label">
-                            프로필 이미지 
+                            프로필 이미지
                             <span class="text-danger">*</span>
                             <small class="text-muted">(200×200px, PNG/JPG/WEBP, 최대 2MB)</small>
                         </label>
@@ -309,7 +309,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <div class="work-mode-explanation"> 
+                <div class="work-mode-explanation">
                     <h6><i class="bi bi-pencil-square"></i> 캐릭터 프롬프트 작성 가이드</h6>
                     <p>캐릭터의 성격, 말투, 배경 등을 자세하게 작성하면 AI가 캐릭터를 더 잘 연기할 수 있습니다.</p>
                     <br>
@@ -329,5 +329,3 @@
     <script src="/js/settings.js"></script>
 </body>
 </html>
-
-

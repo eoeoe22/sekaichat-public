@@ -48,33 +48,62 @@ export async function handleTTS(request, env) {
         request: ttsRequest,
         textLength: text.length
       });
-      
+
       // Try calling ProsekaTTS API
       const apiKey = env.TTS_API_KEY;
       if (!apiKey) {
         throw new Error('TTS API key not configured');
       }
 
-      let apiResponse = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'audio/wav',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify(ttsRequest)
-      });
+      let apiResponse;
+      try {
+        // 1차 시도
+        apiResponse = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'audio/mp3',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify(ttsRequest)
+        });
+
+        if (!apiResponse.ok) {
+          throw new Error(`API 1차 호출 실패: ${apiResponse.status}`);
+        }
+      } catch (error) {
+        console.warn('TTS API 1차 호출 실패, 재시도합니다:', error.message);
+
+        const fallbackApiUrl = env.TTS_SERVICE_URL_FALLBACK;
+        if (!fallbackApiUrl) {
+          console.error('Fallback TTS API URL이 설정되지 않았습니다.');
+          throw error; // Fallback URL이 없으면 원본 에러를 다시 던집니다.
+        }
+
+        console.log(`Fallback TTS API로 재시도: ${fallbackApiUrl}`);
+        // 2차 시도 (Fallback)
+        apiResponse = await fetch(fallbackApiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'audio/mp3',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify(ttsRequest)
+        });
+      }
+
 
       if (!apiResponse.ok) {
         const errorText = await apiResponse.text();
-        console.error('TTS API 에러 응답:', {
+        console.error('TTS API 최종 에러 응답:', {
           status: apiResponse.status,
           statusText: apiResponse.statusText,
           body: errorText,
           character: character_name_code
         });
-        await logError(new Error(`TTS API error: ${apiResponse.status} ${apiResponse.statusText} - ${errorText}`), env, 'TTS API Call');
-        throw new Error(`API 호출 실패: ${apiResponse.status} ${apiResponse.statusText}`);
+        await logError(new Error(`TTS API 최종 에러: ${apiResponse.status} ${apiResponse.statusText} - ${errorText}`), env, 'TTS API Call');
+        throw new Error(`API 호출 최종 실패: ${apiResponse.status} ${apiResponse.statusText}`);
       }
 
       console.log('TTS API 성공 응답:', {
@@ -86,18 +115,18 @@ export async function handleTTS(request, env) {
       // According to the example, ProsekaTTS API returns audio data directly as stream
       // Use TransformStream to pipe the response directly to client
       const { readable, writable } = new TransformStream();
-      
+
       // Handle potential streaming errors
       apiResponse.body.pipeTo(writable).catch(async (error) => {
         console.error('TTS 스트리밍 오류:', error);
         await logError(error, env, 'TTS Streaming Error');
       });
 
-      // Return audio file (wav) as response with proper headers
+      // Return audio file (mp3) as response with proper headers
       return new Response(readable, {
         headers: {
-          'Content-Type': 'audio/wav',
-          'Content-Disposition': 'attachment; filename="speech.wav"'
+          'Content-Type': 'audio/mp3',
+          'Content-Disposition': 'attachment; filename="speech.mp3"'
         }
       });
 
@@ -118,7 +147,7 @@ export async function handleTTS(request, env) {
 
 /**
  * TTS Translation API handler using Gemini
- * Note: Using gemini-2.0-flash as primary model since 2.5 models mentioned in 
+ * Note: Using gemini-2.0-flash as primary model since 2.5 models mentioned in
  * instructions don't appear to exist in current Gemini API
  */
 export async function handleTTSTranslation(request, env) {
@@ -155,7 +184,7 @@ export async function handleTTSTranslation(request, env) {
 
     // Check user's TTS language preference
     const userTtsPreference = user.tts_language_preference || 'jp';
-    
+
     // If user prefers Korean, return original text without translation
     if (userTtsPreference === 'kr') {
       return new Response(JSON.stringify({
@@ -187,7 +216,7 @@ export async function handleTTSTranslation(request, env) {
 
       const result = await callGemini('gemini-2.5-flash-lite', apiKey, body, env, 'TTS Translation');
       console.log('Gemini API 응답:', result);
-      
+
       const translatedText = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
 
       if (!translatedText) {
@@ -270,18 +299,18 @@ export async function handleTTSTest(request, env) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'audio/wav',
+          'Accept': 'audio/mp3',
         },
         body: JSON.stringify(testPayload)
       });
-      
+
       testResult.results.push({
         method: 'call',
         status: response.status,
         statusText: response.statusText,
         success: response.ok
       });
-      
+
       if (response.ok) {
         // For ProsekaTTS API, response is audio stream, not JSON
         testResult.results[0].hasAudioData = true;
@@ -339,4 +368,3 @@ export async function handleTTSDebug(request, env) {
     return new Response('Debug 정보 조회 중 오류가 발생했습니다.', { status: 500 });
   }
 }
-

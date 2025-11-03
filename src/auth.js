@@ -67,13 +67,13 @@ export const handleAuth = {
 
       const token = await createJwt({ 
         userId: user.id, 
-        exp: Date.now() + (24 * 60 * 60 * 1000),
+        exp: Date.now() + (30 * 24 * 60 * 60 * 1000), // Discord 로그인은 기본 30일
         iat: Date.now()
       }, env);
 
       const responseUrl = new URL(request.url);
       const referer = request.headers.get('referer');
-      const redirectPath = referer && new URL(referer).pathname === '/settings' ? '/settings' : '/main.html';
+      const redirectPath = referer && new URL(referer).pathname === '/settings' ? '/settings' : '/main';
       
       const response = new Response(null, {
         status: 302,
@@ -86,7 +86,7 @@ export const handleAuth = {
         `token=${token}`,
         'HttpOnly',
         'SameSite=Lax',
-        'Max-Age=86400',
+        'Max-Age=2592000', // 30일 (초 단위)
         'Path=/'
       ];
       
@@ -115,9 +115,10 @@ export const handleAuth = {
       const formData = await request.formData();
       const username = formData.get('username');
       const password = formData.get('password');
+      const keepLogin = formData.get('keepLogin') === 'on';
       const turnstileToken = formData.get('cf-turnstile-response');
       
-      logDebug('로그인 시도', 'Auth Login', { username });
+      logDebug('로그인 시도', 'Auth Login', { username, keepLogin });
       
       // Turnstile 검증
       const turnstileValid = await verifyTurnstile(turnstileToken, env);
@@ -135,14 +136,18 @@ export const handleAuth = {
         return new Response('으....이....', { status: 401 });
       }
       
-      // JWT 토큰 생성
+      // JWT 토큰 생성 - keepLogin이 체크되면 30일, 아니면 24시간
+      const expirationTime = keepLogin ? 
+        (30 * 24 * 60 * 60 * 1000) : // 30일
+        (24 * 60 * 60 * 1000);      // 24시간
+        
       const token = await createJwt({ 
         userId: user.id, 
-        exp: Date.now() + (24 * 60 * 60 * 1000),
+        exp: Date.now() + expirationTime,
         iat: Date.now()
       }, env);
       
-      logDebug('토큰 생성 완료', 'Auth Login', { userId: user.id });
+      logDebug('토큰 생성 완료', 'Auth Login', { userId: user.id, keepLogin, expirationTime });
       
       const url = new URL(request.url);
       const isSecure = url.protocol === 'https:';
@@ -154,12 +159,14 @@ export const handleAuth = {
         }
       });
       
-      // 쿠키 설정
+      // 쿠키 설정 - keepLogin이 체크되면 30일, 아니면 24시간
+      const maxAge = keepLogin ? (30 * 24 * 60 * 60) : 86400; // 30일 또는 24시간 (초 단위)
+      
       const cookieOptions = [
         `token=${token}`,
         'HttpOnly',
         'SameSite=Lax',
-        'Max-Age=86400',
+        `Max-Age=${maxAge}`,
         'Path=/'
       ];
       
@@ -218,7 +225,7 @@ export const handleAuth = {
 
       const token = await createJwt({ 
         userId: userId, 
-        exp: Date.now() + (24 * 60 * 60 * 1000),
+        exp: Date.now() + (30 * 24 * 60 * 60 * 1000), // 회원가입 시 기본 30일
         iat: Date.now()
       }, env);
 
@@ -236,7 +243,7 @@ export const handleAuth = {
         `token=${token}`,
         'HttpOnly',
         'SameSite=Lax',
-        'Max-Age=86400',
+        'Max-Age=2592000', // 30일 (초 단위)
         'Path=/'
       ];
 
@@ -404,3 +411,4 @@ async function getDiscordUser(accessToken, env) {
   const data = await response.json();
   return data;
 }
+

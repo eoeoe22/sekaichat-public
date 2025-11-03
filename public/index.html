@@ -38,8 +38,6 @@
             <p class="hero-subtitle">당신이 좋아하는 캐릭터와 자유롭게 대화하세요.</p>
             <a href="/login" class="btn btn-light">로그인 <i class="bi bi-box-arrow-in-right"></i></a>
             <a href="/register" class="btn btn-light ms-2">지금 시작하기 <i class="bi bi-arrow-right"></i></a>
-            <br><br><br>
-            <a href="/guest/verify" class="btn btn-outline-light ms-2">게스트로 체험하기</a>
             <br><br>
             <a href="/autorag" class="btn btn-outline-light ms-2">AutoRAG 스토리 검색 <i class="bi bi-search"></i></a>
         </div>
@@ -189,6 +187,8 @@
                                         <div class="feature-icon"><i class="bi bi-soundwave"></i></div>
                                         <h3>TTS 음성 합성</h3>
                                         <p>프로젝트 세카이 캐릭터들의 목소리로 채팅 메시지를 음성으로 들을 수 있습니다. 채팅 메시지의 버튼을 클릭하면 바로 재생해볼 수 있습니다.</p>
+                                        <br>
+                                        <img src="/images/etc/gpu.png" alt="GPU">
                                         <div class="mt-3">
                                             <button class="btn btn-sm btn-outline-primary" onclick="playAudioSample()" title="음성 샘플 재생">
                                                 <i class="bi bi-play-fill"></i> 샘플 듣기
@@ -236,7 +236,7 @@
                             </div>
                         </div>
                         <div class="highlight-box anim-on-scroll fade-in" style="transition-delay: 0.3s;">
-                            <p><strong><i class="bi bi-lightbulb"></i> 사용법:</strong> 채팅에서 "그림을 그려줘", "이미지를 만들어줘" 등으로 요청하면 AI가 자동으로 이미지를 생성합니다.</p>
+                            <p><strong><i class="bi bi-lightbulb"></i></strong> <img src="images/characters/ena.webp" alt="에나 프로필 이미지" class="inline-profile-image">채팅에서 에나에게 "그림을 그려줘", "이미지를 만들어줘" 등으로 요청해보세요.</p>
                         </div>
                     </div>
                 </div>
@@ -247,7 +247,6 @@
                         제작자 & 문의
                     </div>
                     <div class="anim-on-scroll slide-in-right">
-                        <p><strong>제작/관리:</strong> 유동닉 (eoeoe)</p>
                         <p><strong>문의/버그제보:</strong></p>
                         <ul>
                             <li>
@@ -258,33 +257,29 @@
                     </div>
                 </div>
 
-                <div class="about-section">
-                    <div class="about-section-title anim-on-scroll slide-in-left">
-                        <i class="bi bi-shield-check"></i>
-                        개인정보/운영 안내
-                    </div>
-                    <ul class="anim-on-scroll slide-in-right">
-                        <li>서버·DB는 Cloudflare Workers/D1에 보관되며, 비밀번호는 해시+솔팅 암호화하여 저장합니다.</li>
-                        <li>개인 Gemini API키는 사용자가 직접 입력시 서버 DB에 저장하고, 삭제 버튼 클릭시 즉시 완전 삭제됩니다.</li>
-                        <li>모든 대화 데이터/파일은 Gemini API 이외 외부 사이트로 전송하거나 이용하지 않습니다</li>
-                    </ul>
-                </div>
 
                 <div class="about-section">
                     <div class="about-section-title anim-on-scroll slide-in-left">
                         <i class="bi bi-cpu"></i>
-                        AI 모델 및 기술 스택
+                        기술 스택
                     </div>
                     <div class="anim-on-scroll slide-in-right">
                         <p>
                             <span class="tech-badge">
-                                <img src="/images/characters/gemini.png" class="tech-logo" alt="Gemini"><br>Google Gemini
+                                <img src="/images/characters/gemini.png" class="tech-logo" alt="Gemini">Google Gemini
                             </span>
-                            가 챗봇의 핵심을 담당하며, 대화와 이미지를 처리합니다.
+                            <br>
+                            챗봇의 핵심을 담당하며, 모든 대화와 자연어 작업을 처리합니다.
                         </p>
                         <div style="margin-top: 20px;">
                             <span class="tech-badge anim-on-scroll fade-in" style="transition-delay: 0.1s;">
-                                <img src="/images/etc/cloudflare.png" class="tech-logo" alt="Cloudflare"> Cloudflare Workers
+                                <img src="/images/etc/cloudflare.png" class="tech-logo" alt="Cloudflare"> Cloudflare
+                            </span>
+                            <span class="tech-badge anim-on-scroll fade-in" style="transition-delay: 0.1s;">
+                                <img src="/images/etc/Workers.svg" class="tech-logo" alt="Cloudflare Workers"> Workers
+                            </span>
+                            <span class="tech-badge anim-on-scroll fade-in" style="transition-delay: 0.1s;">
+                                <i class="bi bi-bounding-box"></i> AutoRAG
                             </span>
                             <span class="tech-badge anim-on-scroll fade-in" style="transition-delay: 0.2s;">
                                 <i class="bi bi-database"></i> D1 Database
@@ -292,15 +287,19 @@
                             <span class="tech-badge anim-on-scroll fade-in" style="transition-delay: 0.3s;">
                                 <i class="bi bi-file-earmark"></i> R2 Storage
                             </span>
-                            <span class="tech-badge anim-on-scroll fade-in" style="transition-delay: 0.4s;">
-                                <i class="bi bi-code-slash"></i> JavaScript
+                            <br>
+                            <span class="tech-badge anim-on-scroll fade-in" style="transition-delay: 0.1s;">
+                                <i class="bi bi-github"></i> <a href="https://github.com/eoeoe22/sekaichat-public">소스코드 보기</a>
+                            </span>
+                            <span class="tech-badge anim-on-scroll fade-in" style="transition-delay: 0.1s;">
+                                <i class="bi bi-soundwave"></i><a href="https://huggingface.co/spaces/kdrkdrkdr/ProsekaTTS">TTS 모델</a>
                             </span>
                         </div>
                     </div>
                 </div>
 
                 <div class="action-buttons anim-on-scroll fade-in">
-                    <a href="/playground" class="btn btn-primary">
+                    <a href="/chat" class="btn btn-primary">
                         <i class="bi bi-chat-dots"></i> 채팅 시작
                     </a>
                     <a href="/characterinfo" class="btn btn-secondary">
@@ -424,6 +423,21 @@
 </body>
 
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -7,7 +7,7 @@ assets = { directory = "./public" }
 [[d1_databases]]
 binding = "DB"
 database_name = "sekai-chat"
-database_id = ""
+database_id = "  "
 
 [[d1_databases]]
 binding = "KANADE_DB"
@@ -31,25 +31,24 @@ bucket_name = "vectorize"
 
 [[kv_namespaces]]
 binding = "KV"
-id = ""
+id = "  "
 
 [ai]
 binding = "AI"
 
-# 평소엔 안씀
-# 서버 코드 수정시에만 켬
+
 [observability]
 enabled = true
 head_sampling_rate = 1.0
 
 [vars]
 GEMINI_API_KEY = ""
-GUEST_GEMINI_API_KEY = ""
 TTS_SERVICE_URL = ""
+TTS_SERVICE_URL_FALLBACK = ""
 TTS_API_KEY = ""
 
 TURNSTILE_SITE_KEY = ""
-TURNSTILE_SECRET_KEY = "_"
+TURNSTILE_SECRET_KEY = ""
 DOMAIN = "sekaich.at"
 JWT_SECRET = ""
 IMAGE_GENERATION_CHARACTERS = "0,3"
@@ -68,11 +67,12 @@ WORK_MODE_PROMPT = """
 당신은 AI 어시스턴트입니다. 다음 캐릭터의 말투와 성격을 어느 정도 유지하면서도, 사용자의 업무나 학습에 도움이 되는 실용적이고 정확한 정보를 제공하는것을 우선시합니다.
 
 업무 모드 지침:
-- 캐릭터의 기본 말투는 유지하되, 과도한 역할극보다는 실용성을 우선시
+- 캐릭터의 기본 말투는 유지하되, 역할극보다는 실용성을 우선시
 - 정확하고 구체적인 정보 제공에 집중
 - 업무, 학습, 문제해결에 도움이 되는 실질적인 조언 제공
 - 필요시 단계별 설명이나 예시 제공
 - 창의적이고 논리적인 사고로 문제 해결 지원
+- 특정한 말투나 표현 반복 사용 자제하기
 
 마크다운은 사용 가능하나, 표 사용 불가. (표 사용시 제대로 렌더링되지 않고 raw텍스트로만 보임)
 
@@ -83,9 +83,9 @@ COMMON_RULES_PROMPT = """
 - 대답 길이는 되도록 1~~2줄 이하로 짧게 유지합니다.
 - (매우중요!!) 캐릭터 설정·세계관을 벗어나는 발언 지양합니다(메타발언 금지).
 - 사용자에게 기본적으로 친근하게 말투을 사용하며, '~아', 또는 닉네임 그대로 호칭등 친근하게 부릅니다. (~님 금지)
+- 특정한 말투나 표현을 반복해서 사용하는것을 자제하세요.
 
-
-★★★ 매우 중요한 규칙 ★★★
+★매우 중요한 규칙 
 - 당신은 오직 한 명의 캐릭터입니다. 절대로 다른 캐릭터의 대사나 행동을 대신 생성하지 마세요.
 - 한 번의 응답에서는 오직 자신의 캐릭터만의 메시지를 "한개만" 작성합니다.
 - 캐릭터명 : 형식으로 응답하지 마세요. 메시지 내용만 작성하세요.
@@ -98,6 +98,8 @@ COMMON_RULES_PROMPT = """
 
 
 """
+
+
 
 
 

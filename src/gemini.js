@@ -1,5 +1,4 @@
 import { logError, verifyJwt, callGemini } from './utils.js';
-import { generateAffectionPrompt, updateAffectionAuto } from './affection-system.js';
 import { getExtendedCharacterPrompt } from './user-characters.js';
 
 // JWT 토큰에서 사용자 정보 추출
@@ -7,21 +6,21 @@ async function getUserFromToken(request, env) {
   try {
     const cookies = request.headers.get('Cookie');
     if (!cookies) return null;
-    
+
     const tokenMatch = cookies.match(/token=([^;]+)/);
     if (!tokenMatch) return null;
-    
+
     const token = tokenMatch[1];
     const tokenData = await verifyJwt(token, env);
     if (!tokenData) return null;
-    
+
     const user = await env.DB.prepare('SELECT * FROM users WHERE id = ?')
       .bind(tokenData.userId).first();
-    
+
     if (!user) {
       await logError(new Error(`User not found in database for ID: ${tokenData.userId}`), env, 'Gemini: GetUserFromToken');
     }
-    
+
     return user;
   } catch (error) {
     await logError(error, env, 'Gemini: GetUserFromToken');
@@ -54,18 +53,18 @@ async function supportsImageGeneration(characterId, characterType, env) {
       console.log(`Allowed IDs: [${allowedIds.join(', ')}], Is character ID ${characterId} allowed? ${isAllowed}`);
       return isAllowed;
     }
-    
+
     // Custom user characters: ID >= 10000 and exists in user_characters table
     if (characterType === 'user') {
       if (characterId < 10000) return false;
-      
+
       const exists = await env.DB.prepare(
         'SELECT id FROM user_characters WHERE id = ? AND deleted_at IS NULL'
       ).bind(characterId).first();
-      
+
       return !!exists;
     }
-    
+
     return false;
   } catch (error) {
     await logError(error, env, 'Check Image Generation Support');
@@ -77,13 +76,13 @@ async function supportsImageGeneration(characterId, characterType, env) {
 function parseImagePrompt(content) {
   const imagePromptPattern = /<<([^<>]+)>>/g;
   const matches = [...content.matchAll(imagePromptPattern)];
-  
+
   if (matches.length > 0) {
     const prompts = matches.map(match => match[1].trim());
     const cleanContent = content.replace(imagePromptPattern, '').trim();
     return { cleanContent, imagePrompts: prompts };
   }
-  
+
   return { cleanContent: content, imagePrompts: [] };
 }
 
@@ -103,9 +102,9 @@ function base64ToUint8Array(base64) {
 async function saveImageToR2(imageData, env) {
   try {
     if (!imageData) throw new TypeError('imageData 값이 없습니다.');
-    
+
     let body = null;
-    
+
     if (typeof imageData === 'string') {
       body = base64ToUint8Array(imageData);
     } else if (imageData.uint8 instanceof Uint8Array) {
@@ -121,20 +120,20 @@ async function saveImageToR2(imageData, env) {
     } else if (imageData instanceof ArrayBuffer) {
       body = new Uint8Array(imageData);
     }
-    
+
     if (!body) {
       throw new TypeError('지원하지 않는 imageData 타입입니다.');
     }
-    
+
     const fileName = `generated_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.png`;
     const key = `generated_images/${fileName}`;
-    
+
     await env.R2.put(key, body, {
       httpMetadata: {
         contentType: 'image/png'
       }
     });
-    
+
     return { fileName, key };
   } catch (error) {
     await logError(error, env, 'Save Image to R2');
@@ -168,23 +167,23 @@ const CHARACTER_CALL_SYSTEM = `
 export async function handleChat(request, env) {
   try {
     const { message, model, conversationId, imageData, role = 'user' } = await request.json();
-    
+
     const user = await getUserFromToken(request, env);
     if (!user) return new Response('으....이....', { status: 401 });
-    
+
     // 사용자 존재 여부 확인 (Foreign Key 제약조건 오류 방지)
     const userExists = await env.DB.prepare('SELECT id FROM users WHERE id = ?')
       .bind(user.id).first();
-    
+
     if (!userExists) {
       await logError(new Error(`User ID ${user.id} from JWT token does not exist in database`), env, 'Handle Chat - User Validation');
       return new Response('Invalid user session. Please login again.', { status: 401 });
     }
-    
+
     await updateConversationTitle(conversationId, message, env);
-    
+
     const newMessage = await saveChatMessage(conversationId, role, message, env, null, 0, user.id);
-    
+
     return new Response(JSON.stringify({
       success: true,
       message: newMessage
@@ -203,7 +202,7 @@ export async function handleChat(request, env) {
 async function generateImageWithWorkersAI(prompt, env) {
   try {
     const use25Flash = env['25FLASH_IMAGE'] === 'true';
-    
+
     const response = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
       prompt: prompt,
       steps: use25Flash ? 3 : 4,
@@ -249,9 +248,9 @@ async function generateImageWithGemini(prompt, env, apiKey, latestImages = []) {
         }
         const imagePart = data.candidates[0].content.parts.find(part => part.inlineData);
         if (imagePart?.inlineData?.data && imagePart?.inlineData?.mimeType) {
-            return { 
-                base64Data: imagePart.inlineData.data, 
-                mimeType: imagePart.inlineData.mimeType 
+            return {
+                base64Data: imagePart.inlineData.data,
+                mimeType: imagePart.inlineData.mimeType
             };
         }
         throw new Error('No image data found in Gemini API response');
@@ -264,26 +263,26 @@ async function generateImageWithGemini(prompt, env, apiKey, latestImages = []) {
 export async function handleCharacterGeneration(request, env) {
   try {
     const { characterId, conversationId, imageData, workMode, showTime, situationPrompt, imageGenerationEnabled, imageCooldownSeconds, autoCallCount, selectedModel } = await request.json();
-    
+
     const user = await getUserFromToken(request, env);
     if (!user) return new Response('으....이....', { status: 401 });
-    
+
     const participant = await env.DB.prepare(
       'SELECT character_type FROM conversation_participants WHERE conversation_id = ? AND character_id = ?'
     ).bind(conversationId, characterId).first();
-    
+
     if (!participant) {
       return new Response('참여하지 않은 캐릭터입니다.', { status: 400 });
     }
-    
+
     const history = await getChatHistory(conversationId, env);
     const characterPrompt = await getExtendedCharacterPrompt(characterId, env);
     if (!characterPrompt) return new Response('캐릭터를 찾을 수 없습니다.', { status: 404 });
-    
+
     const maxAutoCallSequence = user.max_auto_call_sequence || 3;
     const participants = await getConversationParticipants(conversationId, env);
     const autoragContext = await getAutoragMemoryContext(conversationId, user, env);
-    
+
     let commonRulesPrompt = '';
     if (characterId !== 0) {
       if (workMode) {
@@ -292,21 +291,39 @@ export async function handleCharacterGeneration(request, env) {
         commonRulesPrompt = env.COMMON_RULES_PROMPT;
       }
     }
-    
+
     const currentTime = showTime ? getCurrentSeoulTime() : null;
     let latestImages = imageData ? [imageData] : await getLatestImagesFromHistory(conversationId, env);
-    
+
     const apiKey = user.gemini_api_key || env.GEMINI_API_KEY;
-    
+
     // Use Gemini API for character message generation
     const textResponse = await callGeminiAPI(
       characterPrompt, commonRulesPrompt, history, user.nickname, user.self_introduction,
       apiKey, currentTime, latestImages, autoCallCount || 0, maxAutoCallSequence,
-      participants, situationPrompt, characterId, participant.character_type, 
+      participants, situationPrompt, characterId, participant.character_type,
       imageGenerationEnabled, env, imageCooldownSeconds || 0, conversationId, autoragContext, selectedModel
     );
 
     let processedContent = textResponse;
+    // Gemini API가 JSON 형식의 문자열로 응답하는 경우를 처리
+    if (typeof textResponse === 'string' && textResponse.trim().startsWith('{')) {
+      try {
+        const responseObject = JSON.parse(textResponse);
+        // JSON 응답에 에러가 포함된 경우
+        if (responseObject.error) {
+          await logError(new Error(`Gemini returned a JSON error: ${textResponse}`), env, 'Character Generation - JSON Error');
+          // 사용자에게 표시될 수 있는 일반적인 오류 메시지로 처리
+          processedContent = "오류가 발생하여 응답을 생성할 수 없습니다.";
+        } else {
+          // 'text', 'message' 또는 'response' 필드에서 실제 응답 내용을 추출
+          processedContent = responseObject.response || responseObject.text || responseObject.message || processedContent;
+        }
+      } catch (e) {
+        // 유효한 JSON이 아니면 일반 텍스트로 처리 (기존 동작 유지)
+        await logError(new Error(`Failed to parse potential JSON response: ${textResponse}`), env, 'Character Generation - JSON Parse Fail');
+      }
+    }
     let generatedImages = [];
 
     // Parse image prompts from response first
@@ -321,7 +338,7 @@ export async function handleCharacterGeneration(request, env) {
                 const use25Flash = env['25FLASH_IMAGE'] === 'true';
                 let imageResult = null;
                 let imageData = null;
-                
+
                 if (use25Flash) {
                     // Use Gemini API for image generation when 25FLASH_IMAGE is true
                     imageResult = await generateImageWithGemini(prompt, env, apiKey, latestImages);
@@ -335,7 +352,7 @@ export async function handleCharacterGeneration(request, env) {
                         imageData = imageResult; // Workers AI returns the image buffer directly
                     }
                 }
-                
+
                 if (imageData) {
                     const savedImage = await saveImageToR2(imageData, env);
                     if (savedImage) {
@@ -343,14 +360,14 @@ export async function handleCharacterGeneration(request, env) {
                         const fileResult = await env.DB.prepare(
                             'INSERT INTO files (user_id, filename, original_name, file_size, mime_type, r2_key) VALUES (?, ?, ?, ?, ?, ?) RETURNING id'
                         ).bind(
-                            user.id, 
+                            user.id,
                             `generated/${savedImage.fileName}`, // Add generated/ prefix for correct image serving
-                            `Generated: ${prompt}`, 
+                            `Generated: ${prompt}`,
                             0, // File size not available for generated images
-                            'image/png', 
+                            'image/png',
                             savedImage.key
                         ).first();
-                        
+
                         // Save generated image as message record
                         await env.DB.prepare(
                             'INSERT INTO messages (conversation_id, role, content, character_id, user_character_id, message_type, file_id, user_id, character_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
@@ -365,7 +382,7 @@ export async function handleCharacterGeneration(request, env) {
                             user.id,
                             participant.character_type
                         ).run();
-                        
+
                         generatedImages.push({
                             prompt: prompt,
                             fileName: savedImage.fileName,
@@ -377,7 +394,7 @@ export async function handleCharacterGeneration(request, env) {
                 await logError(error, env, `Process Image Generation (${env['25FLASH_IMAGE'] === 'true' ? 'Gemini' : 'Workers AI'})`);
             }
         }
-        
+
         // Refresh chat history cache if images were generated
         if (generatedImages.length > 0) {
             await refreshChatHistoryCache(conversationId, env);
@@ -385,32 +402,19 @@ export async function handleCharacterGeneration(request, env) {
     }
 
     const { cleanContent: finalContent, calledCharacter } = parseCharacterCall(processedContent);
-    
+
     const newMessage = await saveChatMessage(conversationId, 'assistant', finalContent, env, characterId, autoCallCount || 0, null, participant.character_type);
-    
-    if (history.length > 0) {
-      const lastUserMessage = history.filter(msg => msg.role === 'user').pop();
-      if (lastUserMessage) {
-        await updateAffectionAuto(
-          conversationId, 
-          characterId, 
-          participant.character_type, 
-          lastUserMessage.content, 
-          finalContent, 
-          env
-        );
-      }
-    }
-    
+
     return new Response(JSON.stringify({
       response: finalContent,
       calledCharacter,
       newMessage: newMessage,
-      generatedImages: generatedImages // Keep for profile updates
+      generatedImages: generatedImages, // Keep for profile updates
+      imageGenerationAttempted: imageGenerationEnabled && imagePrompts.length > 0 // Indicate if generation was attempted
     }), {
       headers: { 'Content-Type': 'application/json' }
     });
-    
+
   } catch (error) {
     await logError(error, env, 'Character Generation');
     return new Response('으....이....', { status: 500 });
@@ -478,14 +482,7 @@ async function callGeminiAPI(characterPrompt, commonRulesPrompt, history, userNi
         ).bind(conversationId, currentCharacterId, currentCharacterType).first();
 
         if (participant && participant.affection_level !== null) {
-          const affectionPrompt = generateAffectionPrompt(
-            currentCharacterId, 
-            participant.affection_level, 
-            userNickname
-          );
-          if (affectionPrompt) {
-            systemPrompt += '\n\n[호감도 정보]\n' + affectionPrompt;
-          }
+          // The affection prompt generation is removed.
         }
       }
     } catch (affectionError) {
@@ -580,7 +577,7 @@ export async function handleAutoReply(request, env) {
         // 3. Ask model to select next speaker
         const participantNames = participants.map(p => p.name);
         const userNickname = user.nickname || '사용자';
-        
+
         const prompt = `최근 대화 내용입니다:\n${historyText}\n\n대화 참가자 목록: [${participantNames.join(', ')}, ${userNickname}]\n\n다음으로 답변할 대화 참가자를 목록에서 선정해 이름만 정확히 말해주세요.`;
 
         const apiKey = user.gemini_api_key || env.GEMINI_API_KEY;
@@ -606,7 +603,7 @@ export async function handleAutoReply(request, env) {
         // 5. Find the selected character
         const selectedCharacter = participants.find(p => nextSpeakerName.includes(p.name));
         if (!selectedCharacter) {
-            continue; 
+            continue;
         }
 
         // 6. Generate the character's response by calling handleCharacterGeneration
@@ -653,7 +650,7 @@ async function getRecentMessages(conversationId, limit, env) {
   try {
     const { results } = await env.DB.prepare(
       `SELECT * FROM (
-          SELECT 
+          SELECT
               m.role, m.content, m.created_at,
               COALESCE(c.name, uc.name) as character_name
            FROM messages m
@@ -679,22 +676,22 @@ async function getAutoragMemoryContext(conversationId, user, env) {
     const conversation = await env.DB.prepare(
       'SELECT use_autorag_memory FROM conversations WHERE id = ?'
     ).bind(conversationId).first();
-    
+
     if (!conversation || !conversation.use_autorag_memory) {
       return null;
     }
-    
+
     // 최근 5개 메시지 조회
     const recentMessages = await getRecentMessages(conversationId, 5, env);
     if (recentMessages.length === 0) {
       return null;
     }
-    
+
     // 최근 메시지들을 쿼리 텍스트로 결합
     const conversationText = recentMessages
       .map(msg => `${msg.character_name || msg.role}: ${msg.content}`)
       .join('\n');
-    
+
     if (!conversationText.trim()) {
       return null;
     }
@@ -717,38 +714,38 @@ async function getAutoragMemoryContext(conversationId, user, env) {
     } catch (error) {
         await logError(error, env, 'AutoRAG Keyword Extraction');
     }
-    
+
     // Cloudflare AutoRAG로 검색
     try {
       const answer = await env.AI.autorag("sekai").search({
         query: keywords, // Use extracted keywords
       });
-      
+
       if (answer && answer.length > 0) {
         // Enhanced extraction to preserve filename metadata
         const extractedResults = extractAutoragResultsForChat(answer, env);
-        
+
         // Format results with filename information when available
         const formattedResults = extractedResults.map(result => {
           let resultText = result.text;
-          
+
           // Add filename information if available
           if (result.filename) {
             resultText = `📁 ${result.filename}\n${result.text}`;
           } else if (result.source && !result.source.startsWith('검색 결과') && !result.source.startsWith('문서')) {
             resultText = `📋 ${result.source}\n${result.text}`;
           }
-          
+
           return resultText;
         });
-        
+
         return formattedResults.join('\n\n');
       }
     } catch (autoragError) {
       await logError(autoragError, env, 'AutoRAG Search');
       // AutoRAG 실패 시 null 반환 (대화는 계속 진행)
     }
-    
+
     return null;
   } catch (error) {
     await logError(error, env, 'Get AutoRAG Memory Context');
@@ -776,7 +773,7 @@ function extractAutoragResultsForChat(results) {
   else {
     const potentialResultKeys = ['results', 'data', 'documents', 'passages'];
     let found = false;
-    
+
     for (const key of potentialResultKeys) {
       if (results[key] && Array.isArray(results[key])) {
         extractedResults = results[key].map((result, index) => {
@@ -785,18 +782,18 @@ function extractAutoragResultsForChat(results) {
           }
           if (typeof result === 'object' && result !== null) {
             // Extract filename from various possible metadata locations
-            let filename = result.filename || 
-                         result.metadata?.filename || 
-                         result.metadata?.file || 
+            let filename = result.filename ||
+                         result.metadata?.filename ||
+                         result.metadata?.file ||
                          result.metadata?.source_file ||
                          result.source_metadata?.filename ||
                          result.document_metadata?.filename;
-            
-            let source = filename || 
-                        result.source || 
-                        result.metadata?.source || 
+
+            let source = filename ||
+                        result.source ||
+                        result.metadata?.source ||
                         `검색 결과 ${index + 1}`;
-            
+
             return {
               source: source,
               text: result.text || result.content || result.passage || JSON.stringify(result),
@@ -813,13 +810,13 @@ function extractAutoragResultsForChat(results) {
     if (!found) {
       // Case 3: Results is a single object with text/content
       if (typeof results === 'object' && (results.text || results.content)) {
-        let filename = results.filename || 
-                      results.metadata?.filename || 
-                      results.metadata?.file || 
+        let filename = results.filename ||
+                      results.metadata?.filename ||
+                      results.metadata?.file ||
                       results.metadata?.source_file ||
                       results.source_metadata?.filename ||
                       results.document_metadata?.filename;
-        
+
         extractedResults = [{
           source: filename || results.source || '검색 결과',
           text: results.text || results.content,
@@ -852,13 +849,13 @@ function extractAutoragResultsForChat(results) {
 function parseCharacterCall(content) {
   const callPattern = /@([^\s@]+(?:\s+[^[\@]+)*)\s*$/;
   const match = content.match(callPattern);
-  
+
   if (match) {
     const calledCharacter = match[1].trim();
     const cleanContent = content.replace(callPattern, '').trim();
     return { cleanContent, calledCharacter };
   }
-  
+
   return { cleanContent: content, calledCharacter: null };
 }
 
@@ -868,7 +865,7 @@ async function getChatHistoryFromDB(conversationId, env) {
   try {
     const { results } = await env.DB.prepare(
       `SELECT * FROM (
-          SELECT 
+          SELECT
               m.role, m.content, m.auto_call_sequence, m.created_at,
               CASE WHEN m.role = 'user' THEN u.nickname ELSE NULL END as nickname,
               COALESCE(c.name, uc.name) as character_name
@@ -948,10 +945,10 @@ async function saveChatMessage(conversationId, role, content, env, characterId =
     const userCharacterId = characterType === 'user' ? characterId : null;
 
     const result = await env.DB.prepare(
-      `INSERT INTO messages (conversation_id, role, content, character_id, user_character_id, auto_call_sequence, user_id, character_type) 
+      `INSERT INTO messages (conversation_id, role, content, character_id, user_character_id, auto_call_sequence, user_id, character_type)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`
     ).bind(conversationId, role, content, officialCharacterId, userCharacterId, autoCallSequence, userId, characterType).first();
-    
+
     // After saving a new message, immediately refresh the cache.
     await refreshChatHistoryCache(conversationId, env);
 
@@ -965,10 +962,10 @@ async function saveChatMessage(conversationId, role, content, env, characterId =
 async function getConversationParticipants(conversationId, env) {
   try {
     const { results } = await env.DB.prepare(`
-      SELECT 
+      SELECT
         cp.character_id as id,
         cp.character_type as type,
-        CASE 
+        CASE
           WHEN cp.character_type = 'official' THEN c.name
           ELSE uc.name
         END as name,
@@ -986,7 +983,7 @@ async function getConversationParticipants(conversationId, env) {
       WHERE cp.conversation_id = ?
       ORDER BY cp.created_at ASC
     `).bind(conversationId).all();
-    
+
     return results.filter(p => p.name);
   } catch (error) {
     await logError(error, env, 'Get Conversation Participants');
@@ -999,7 +996,7 @@ async function getCurrentAutoCallSequence(conversationId, env) {
     const result = await env.DB.prepare(
       'SELECT COALESCE(MAX(auto_call_sequence), 0) as max_sequence FROM messages WHERE conversation_id = ?'
     ).bind(conversationId).first();
-    
+
     return result?.max_sequence || 0;
   } catch (error) {
     return 0;
@@ -1024,21 +1021,21 @@ async function getLatestImagesFromHistory(conversationId, env, limit = 2) {
        ORDER BY m.created_at DESC
        LIMIT ?`
     ).bind(conversationId, limit).all();
-    
+
     if (!results || results.length === 0) return [];
-    
+
     const images = [];
     for (const result of results) {
       try {
         // Check if it's a generated image (stored with r2_key) or uploaded image
         const key = result.r2_key || `image_uploads/${result.filename}`;
         const object = await env.R2.get(key);
-        
+
         if (object) {
           const arrayBuffer = await object.arrayBuffer();
           const binaryString = uint8ArrayToBinaryString(new Uint8Array(arrayBuffer));
           const base64Data = btoa(binaryString);
-          
+
           images.push({
             base64Data,
             mimeType: result.mime_type,
@@ -1050,7 +1047,7 @@ async function getLatestImagesFromHistory(conversationId, env, limit = 2) {
         // Continue with other images even if one fails
       }
     }
-    
+
     return images;
   } catch (error) {
     await logError(error, env, 'Get Latest Images');
@@ -1063,10 +1060,10 @@ async function updateConversationTitle(conversationId, message, env) {
     const conversation = await env.DB.prepare(
       'SELECT title FROM conversations WHERE id = ?'
     ).bind(conversationId).first();
-    
+
     if (!conversation || !conversation.title || conversation.title.startsWith('대화 ')) {
       const title = message.length > 20 ? message.substring(0, 17) + '...' : message;
-      
+
       await env.DB.prepare(
         'UPDATE conversations SET title = ? WHERE id = ?'
       ).bind(title, conversationId).run();
@@ -1101,7 +1098,7 @@ export async function handleSelectSpeaker(request, env) {
 
     const participantNames = participants.map(p => p.nickname ? `${p.name}(${p.nickname})` : p.name);
     const userNickname = user.nickname || '사용자';
-    
+
     const prompt = `최근 대화 내용입니다:\n${historyText}\n\n대화 참가자 목록: [${participantNames.join(', ')}, ${userNickname}]\n\n바로 직전 발언자는 "${lastSpeakerName}"입니다. 대화의 흐름상 꼭 필요한 경우가 아니라면, "${lastSpeakerName}"가 아닌 다른 참가자를 다음 발언자로 선정해주세요. 다음으로 답변할 대화 참가자를 목록에서 선정해 이름만 정확히 말해주세요.`;
 
     const apiKey = user.gemini_api_key || env.GEMINI_API_KEY;
@@ -1176,4 +1173,3 @@ async function getCharacterDetails(characterId, characterType, env) {
     }
     return character;
 }
-

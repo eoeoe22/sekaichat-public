@@ -336,6 +336,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             try { await window.initializeUserCharacters(); } catch(e){ console.error(e); }
         }
 
+        // URL에서 대화 ID 확인 및 로드
+        const urlParams = new URLSearchParams(window.location.search);
+        const conversationIdFromUrl = urlParams.get('conv');
+        if (conversationIdFromUrl) {
+            await loadConversation(conversationIdFromUrl);
+        }
 
         // 기존 loadConversations 래핑
         setTimeout(() => {
@@ -515,13 +521,32 @@ function handleImageGenerationToggle(e) {
 
 // 이벤트 리스너 설정
 function setupEventListeners() {
+    const messageInput = document.getElementById('messageInput');
+
     document.getElementById('sendButton').addEventListener('click', () => sendMessage('user'));
-    document.getElementById('messageInput').addEventListener('keypress', e => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
-        }
-    });
+
+    if (messageInput) {
+        messageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                document.getElementById('sendButton').click();
+            }
+        });
+
+        messageInput.addEventListener('input', () => {
+            messageInput.style.height = 'auto';
+            messageInput.style.height = (messageInput.scrollHeight) + 'px';
+        });
+
+        messageInput.addEventListener('blur', () => {
+            setTimeout(() => {
+                if (document.activeElement !== messageInput) {
+                    messageInput.style.height = 'auto';
+                }
+            }, 0);
+        });
+    }
+
     document.getElementById('imageUploadBtn').addEventListener('click', () => {
         if (!userInfo.has_api_key) {
             alert('이미지 업로드는 개인 Gemini API 키가 등록된 사용자만 이용할 수 있습니다.');
@@ -1147,6 +1172,12 @@ async function loadConversation(id) {
     awaitingResponse = false;
     autoCallInProgress = false;
     window.currentConversationId = currentConversationId;
+
+    // URL 업데이트
+    const url = new URL(window.location);
+    url.searchParams.set('conv', id);
+    history.pushState({ conversationId: id }, '', url);
+
     try {
         const response = await fetch(`/api/conversations/${id}`);
         if (response.ok) {
@@ -1654,6 +1685,12 @@ async function startNewConversation() {
             if (window.loadConversations) await window.loadConversations();
             applyMarkdownMode();
             updateStartConversationPanel(); // [추가]
+
+            // URL에서 conv 파라미터 제거
+            const url = new URL(window.location);
+            url.searchParams.delete('conv');
+            history.pushState({}, '', url);
+
         } else if (response.status === 401) {
             window.location.href = '/login';
         } else {

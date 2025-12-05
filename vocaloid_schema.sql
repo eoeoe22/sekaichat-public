@@ -1,0 +1,8 @@
+CREATE TABLE songs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  url TEXT UNIQUE NOT NULL,
+  title TEXT NOT NULL,
+  category TEXT,
+  crawled_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  content_hash TEXT
+);

@@ -219,45 +219,45 @@ async function generateImageWithWorkersAI(prompt, env) {
 // Generate image using Gemini 2.0 Flash Preview Image Generation model with optional reference images
 // Supports image-to-image functionality by including the most recent image from conversation
 async function generateImageWithGemini(prompt, env, apiKey, latestImages = []) {
-    const parts = [{ text: prompt }];
-    if (latestImages && latestImages.length > 0) {
-        const imagesToUse = latestImages.slice(-2).reverse();
-        for (const recentImage of imagesToUse) {
-            if (recentImage && recentImage.base64Data && recentImage.mimeType) {
-                parts.push({
-                    inlineData: {
-                        mimeType: recentImage.mimeType,
-                        data: recentImage.base64Data
-                    }
-                });
-            }
-        }
+  const parts = [{ text: prompt }];
+  if (latestImages && latestImages.length > 0) {
+    const imagesToUse = latestImages.slice(-2).reverse();
+    for (const recentImage of imagesToUse) {
+      if (recentImage && recentImage.base64Data && recentImage.mimeType) {
+        parts.push({
+          inlineData: {
+            mimeType: recentImage.mimeType,
+            data: recentImage.base64Data
+          }
+        });
+      }
     }
+  }
 
-    const body = {
-        contents: [{ parts: parts }],
-        generationConfig: {
-            responseModalities: ["TEXT", "IMAGE"]
-        }
-    };
-
-    try {
-        const data = await callGemini('gemini-2.0-flash-preview-image-generation', apiKey, body, env, 'Generate Image with Gemini');
-        if (!data.candidates?.[0]?.content?.parts) {
-            throw new Error('Invalid response structure from Gemini API');
-        }
-        const imagePart = data.candidates[0].content.parts.find(part => part.inlineData);
-        if (imagePart?.inlineData?.data && imagePart?.inlineData?.mimeType) {
-            return {
-                base64Data: imagePart.inlineData.data,
-                mimeType: imagePart.inlineData.mimeType
-            };
-        }
-        throw new Error('No image data found in Gemini API response');
-    } catch (error) {
-        await logError(error, env, 'Generate Image with Gemini');
-        return null;
+  const body = {
+    contents: [{ parts: parts }],
+    generationConfig: {
+      responseModalities: ["TEXT", "IMAGE"]
     }
+  };
+
+  try {
+    const data = await callGemini('gemini-2.0-flash-preview-image-generation', apiKey, body, env, 'Generate Image with Gemini');
+    if (!data.candidates?.[0]?.content?.parts) {
+      throw new Error('Invalid response structure from Gemini API');
+    }
+    const imagePart = data.candidates[0].content.parts.find(part => part.inlineData);
+    if (imagePart?.inlineData?.data && imagePart?.inlineData?.mimeType) {
+      return {
+        base64Data: imagePart.inlineData.data,
+        mimeType: imagePart.inlineData.mimeType
+      };
+    }
+    throw new Error('No image data found in Gemini API response');
+  } catch (error) {
+    await logError(error, env, 'Generate Image with Gemini');
+    return null;
+  }
 }
 
 export async function handleCharacterGeneration(request, env) {
@@ -332,73 +332,73 @@ export async function handleCharacterGeneration(request, env) {
 
     // Only run image generation if there are actual image prompts and the feature is enabled
     if (imageGenerationEnabled && imagePrompts.length > 0 && await supportsImageGeneration(characterId, participant.character_type, env)) {
-        for (const prompt of imagePrompts) {
-            try {
-                // Check 25FLASH_IMAGE setting to decide which image generation method to use
-                const use25Flash = env['25FLASH_IMAGE'] === 'true';
-                let imageResult = null;
-                let imageData = null;
+      for (const prompt of imagePrompts) {
+        try {
+          // Check 25FLASH_IMAGE setting to decide which image generation method to use
+          const use25Flash = env['25FLASH_IMAGE'] === 'true';
+          let imageResult = null;
+          let imageData = null;
 
-                if (use25Flash) {
-                    // Use Gemini API for image generation when 25FLASH_IMAGE is true
-                    imageResult = await generateImageWithGemini(prompt, env, apiKey, latestImages);
-                    if (imageResult && imageResult.base64Data) {
-                        imageData = imageResult.base64Data;
-                    }
-                } else {
-                    // Use Workers AI (Flux) for image generation when 25FLASH_IMAGE is false
-                    imageResult = await generateImageWithWorkersAI(prompt, env);
-                    if (imageResult) {
-                        imageData = imageResult; // Workers AI returns the image buffer directly
-                    }
-                }
-
-                if (imageData) {
-                    const savedImage = await saveImageToR2(imageData, env);
-                    if (savedImage) {
-                        // Save generated image to files table
-                        const fileResult = await env.DB.prepare(
-                            'INSERT INTO files (user_id, filename, original_name, file_size, mime_type, r2_key) VALUES (?, ?, ?, ?, ?, ?) RETURNING id'
-                        ).bind(
-                            user.id,
-                            `generated/${savedImage.fileName}`, // Add generated/ prefix for correct image serving
-                            `Generated: ${prompt}`,
-                            0, // File size not available for generated images
-                            'image/png',
-                            savedImage.key
-                        ).first();
-
-                        // Save generated image as message record
-                        await env.DB.prepare(
-                            'INSERT INTO messages (conversation_id, role, content, character_id, user_character_id, message_type, file_id, user_id, character_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-                        ).bind(
-                            conversationId,
-                            'assistant',
-                            `🖼️ "${prompt}"`,
-                            participant.character_type === 'official' ? characterId : null,
-                            participant.character_type === 'user' ? characterId : null,
-                            'image',
-                            fileResult.id,
-                            user.id,
-                            participant.character_type
-                        ).run();
-
-                        generatedImages.push({
-                            prompt: prompt,
-                            fileName: savedImage.fileName,
-                            url: `/api/images/generated/${savedImage.fileName}`
-                        });
-                    }
-                }
-            } catch (error) {
-                await logError(error, env, `Process Image Generation (${env['25FLASH_IMAGE'] === 'true' ? 'Gemini' : 'Workers AI'})`);
+          if (use25Flash) {
+            // Use Gemini API for image generation when 25FLASH_IMAGE is true
+            imageResult = await generateImageWithGemini(prompt, env, apiKey, latestImages);
+            if (imageResult && imageResult.base64Data) {
+              imageData = imageResult.base64Data;
             }
-        }
+          } else {
+            // Use Workers AI (Flux) for image generation when 25FLASH_IMAGE is false
+            imageResult = await generateImageWithWorkersAI(prompt, env);
+            if (imageResult) {
+              imageData = imageResult; // Workers AI returns the image buffer directly
+            }
+          }
 
-        // Refresh chat history cache if images were generated
-        if (generatedImages.length > 0) {
-            await refreshChatHistoryCache(conversationId, env);
+          if (imageData) {
+            const savedImage = await saveImageToR2(imageData, env);
+            if (savedImage) {
+              // Save generated image to files table
+              const fileResult = await env.DB.prepare(
+                'INSERT INTO files (user_id, filename, original_name, file_size, mime_type, r2_key) VALUES (?, ?, ?, ?, ?, ?) RETURNING id'
+              ).bind(
+                user.id,
+                `generated/${savedImage.fileName}`, // Add generated/ prefix for correct image serving
+                `Generated: ${prompt}`,
+                0, // File size not available for generated images
+                'image/png',
+                savedImage.key
+              ).first();
+
+              // Save generated image as message record
+              await env.DB.prepare(
+                'INSERT INTO messages (conversation_id, role, content, character_id, user_character_id, message_type, file_id, user_id, character_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+              ).bind(
+                conversationId,
+                'assistant',
+                `🖼️ "${prompt}"`,
+                participant.character_type === 'official' ? characterId : null,
+                participant.character_type === 'user' ? characterId : null,
+                'image',
+                fileResult.id,
+                user.id,
+                participant.character_type
+              ).run();
+
+              generatedImages.push({
+                prompt: prompt,
+                fileName: savedImage.fileName,
+                url: `/api/images/generated/${savedImage.fileName}`
+              });
+            }
+          }
+        } catch (error) {
+          await logError(error, env, `Process Image Generation (${env['25FLASH_IMAGE'] === 'true' ? 'Gemini' : 'Workers AI'})`);
         }
+      }
+
+      // Refresh chat history cache if images were generated
+      if (generatedImages.length > 0) {
+        await refreshChatHistoryCache(conversationId, env);
+      }
     }
 
     const { cleanContent: finalContent, calledCharacter } = parseCharacterCall(processedContent);
@@ -410,7 +410,7 @@ export async function handleCharacterGeneration(request, env) {
       calledCharacter,
       newMessage: newMessage,
       generatedImages: generatedImages, // Keep for profile updates
-      imageGenerationAttempted: imageGenerationEnabled && imagePrompts.length > 0 // Indicate if generation was attempted
+      imageGenerationAttempted: imageGenerationEnabled && imagePrompts.length > 0
     }), {
       headers: { 'Content-Type': 'application/json' }
     });
@@ -418,6 +418,110 @@ export async function handleCharacterGeneration(request, env) {
   } catch (error) {
     await logError(error, env, 'Character Generation');
     return new Response('으....이....', { status: 500 });
+  }
+}
+
+export async function handleAutoReply(request, env) {
+  try {
+    const user = await getUserFromToken(request, env);
+    if (!user) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+
+    const { conversationId } = await request.json();
+    if (!conversationId) {
+      return new Response('Missing conversationId', { status: 400 });
+    }
+
+    const maxSequence = user.max_auto_call_sequence || 1;
+    const generatedMessages = [];
+
+    for (let i = 0; i < maxSequence; i++) {
+      // 1. Get participants
+      const participants = await getConversationParticipants(conversationId, env);
+      if (participants.length === 0) break;
+
+      // 2. Get recent messages
+      const recentMessages = await getRecentMessages(conversationId, 10, env);
+      const historyText = recentMessages.map(m => `${m.character_name || m.role}: ${m.content}`).join('\n');
+
+      // 3. Determine next speaker
+      let nextSpeakerName = null;
+      let selectedCharacter = null;
+
+      // [Optimization] If there is only one character, select them immediately without asking Gemini
+      if (participants.length === 1) {
+        selectedCharacter = participants[0];
+      } else {
+        // Ask model to select next speaker (only for multi-character chats)
+        const participantNames = participants.map(p => p.name);
+        const userNickname = user.nickname || '사용자';
+
+        const prompt = `최근 대화 내용입니다:\n${historyText}\n\n대화 참가자 목록: [${participantNames.join(', ')}, ${userNickname}]\n\n다음으로 답변할 대화 참가자를 목록에서 선정해 이름만 정확히 말해주세요.`;
+
+        const apiKey = user.gemini_api_key || env.GEMINI_API_KEY;
+        const body = {
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 1.0, maxOutputTokens: 50 }
+        };
+
+        try {
+          const nextSpeakerData = await callGemini('gemini-2.5-flash-lite', apiKey, body, env, 'Auto-Reply Speaker Selection');
+          nextSpeakerName = nextSpeakerData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        } catch (error) {
+          await logError(error, env, 'Auto-Reply Speaker Selection');
+          continue; // Continue to next iteration on error
+        }
+
+        // 4. Check if the user was selected
+        if (!nextSpeakerName || nextSpeakerName.includes('유저') || nextSpeakerName.includes(userNickname)) {
+          break; // Stop if user is selected or response is invalid
+        }
+
+        // 5. Find the selected character
+        selectedCharacter = participants.find(p => nextSpeakerName.includes(p.name));
+        if (!selectedCharacter) {
+          continue;
+        }
+      }
+
+      // 6. Generate the character's response by calling handleCharacterGeneration
+      try {
+        const generationRequest = new Request(request.url, {
+          method: 'POST',
+          headers: request.headers,
+          body: JSON.stringify({
+            conversationId,
+            characterId: selectedCharacter.id,
+            characterType: selectedCharacter.type,
+            autoCallCount: i + 1,
+            // Pass other necessary parameters from conversation settings
+            workMode: false, // Assuming default, adjust as needed
+            showTime: true, // Assuming default, adjust as needed
+            situationPrompt: '', // Assuming default, adjust as needed
+            imageGenerationEnabled: true, // Assuming default, adjust as needed
+          }),
+        });
+
+        const response = await handleCharacterGeneration(generationRequest, env);
+        if (response.ok) {
+          const messageData = await response.json();
+          generatedMessages.push(messageData.newMessage);
+        } else {
+          break;
+        }
+      } catch (error) {
+        await logError(error, env, 'Auto-Reply Generation');
+        break;
+      }
+    }
+
+    return new Response(JSON.stringify({ messages: generatedMessages }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (error) {
+    await logError(error, env, 'Handle Auto Reply');
+    return new Response('Internal Server Error', { status: 500 });
   }
 }
 
@@ -491,8 +595,8 @@ async function callGeminiAPI(characterPrompt, commonRulesPrompt, history, userNi
   }
 
   if (imageGenerationEnabled && await supportsImageGeneration(currentCharacterId, currentCharacterType, env)) {
-      let imagePrompt = `\n이미지 생성 기능 사용법: 그림을 그려달라는 요청을 받으면, 메시지에 <<여기에 그림에 대한 영어 프롬프트>>형식으로 이미지 생성 명령을 포함하세요.`;
-      systemPrompt += `\n\n${imagePrompt}`;
+    let imagePrompt = `\n이미지 생성 기능 사용법: 그림을 그려달라는 요청을 받으면, 메시지에 <<여기에 그림에 대한 영어 프롬프트>>형식으로 이미지 생성 명령을 포함하세요.`;
+    systemPrompt += `\n\n${imagePrompt}`;
   }
 
   if (autoCallSequence > 0) {
@@ -508,7 +612,7 @@ async function callGeminiAPI(characterPrompt, commonRulesPrompt, history, userNi
       } else if (msg.role === 'assistant') {
         return `${msg.character_name || '캐릭터'} : ${msg.content}`;
       } else if (msg.role === 'situation') {
-          return `[상황] ${msg.content}`;
+        return `[상황] ${msg.content}`;
       }
       return null;
     }).filter(Boolean).join('\n-----\n');
@@ -549,126 +653,6 @@ async function callGeminiAPI(characterPrompt, commonRulesPrompt, history, userNi
   }
 }
 
-
-export async function handleAutoReply(request, env) {
-  try {
-    const user = await getUserFromToken(request, env);
-    if (!user) {
-        return new Response('Unauthorized', { status: 401 });
-    }
-
-    const { conversationId } = await request.json();
-    if (!conversationId) {
-        return new Response('Missing conversationId', { status: 400 });
-    }
-
-    const maxSequence = user.max_auto_call_sequence || 1;
-    const generatedMessages = [];
-
-    for (let i = 0; i < maxSequence; i++) {
-        // 1. Get participants
-        const participants = await getConversationParticipants(conversationId, env);
-        if (participants.length === 0) break;
-
-        // 2. Get recent messages
-        const recentMessages = await getRecentMessages(conversationId, 10, env);
-        const historyText = recentMessages.map(m => `${m.character_name || m.role}: ${m.content}`).join('\n');
-
-        // 3. Ask model to select next speaker
-        const participantNames = participants.map(p => p.name);
-        const userNickname = user.nickname || '사용자';
-
-        const prompt = `최근 대화 내용입니다:\n${historyText}\n\n대화 참가자 목록: [${participantNames.join(', ')}, ${userNickname}]\n\n다음으로 답변할 대화 참가자를 목록에서 선정해 이름만 정확히 말해주세요.`;
-
-        const apiKey = user.gemini_api_key || env.GEMINI_API_KEY;
-        const body = {
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 1.0, maxOutputTokens: 50 }
-        };
-
-        let nextSpeakerName = null;
-        try {
-            const nextSpeakerData = await callGemini('gemini-2.5-flash-lite', apiKey, body, env, 'Auto-Reply Speaker Selection');
-            nextSpeakerName = nextSpeakerData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-        } catch (error) {
-            await logError(error, env, 'Auto-Reply Speaker Selection');
-            continue; // Continue to next iteration on error
-        }
-
-        // 4. Check if the user was selected
-        if (!nextSpeakerName || nextSpeakerName.includes('유저') || nextSpeakerName.includes(userNickname)) {
-            break; // Stop if user is selected or response is invalid
-        }
-
-        // 5. Find the selected character
-        const selectedCharacter = participants.find(p => nextSpeakerName.includes(p.name));
-        if (!selectedCharacter) {
-            continue;
-        }
-
-        // 6. Generate the character's response by calling handleCharacterGeneration
-        try {
-            const generationRequest = new Request(request.url, {
-                method: 'POST',
-                headers: request.headers,
-                body: JSON.stringify({
-                    conversationId,
-                    characterId: selectedCharacter.id,
-                    characterType: selectedCharacter.type,
-                    autoCallCount: i + 1,
-                    // Pass other necessary parameters from conversation settings
-                    workMode: false, // Assuming default, adjust as needed
-                    showTime: true, // Assuming default, adjust as needed
-                    situationPrompt: '', // Assuming default, adjust as needed
-                    imageGenerationEnabled: true, // Assuming default, adjust as needed
-                }),
-            });
-
-            const response = await handleCharacterGeneration(generationRequest, env);
-            if (response.ok) {
-                const messageData = await response.json();
-                generatedMessages.push(messageData.newMessage);
-            } else {
-                break;
-            }
-        } catch (error) {
-            await logError(error, env, 'Auto-Reply Generation');
-            break;
-        }
-    }
-
-    return new Response(JSON.stringify({ messages: generatedMessages }), {
-        headers: { 'Content-Type': 'application/json' },
-    });
-  } catch (error) {
-    await logError(error, env, 'Handle Auto Reply');
-    return new Response('Internal Server Error', { status: 500 });
-  }
-}
-
-async function getRecentMessages(conversationId, limit, env) {
-  try {
-    const { results } = await env.DB.prepare(
-      `SELECT * FROM (
-          SELECT
-              m.role, m.content, m.created_at,
-              COALESCE(c.name, uc.name) as character_name
-           FROM messages m
-           LEFT JOIN characters c ON m.character_id = c.id AND m.character_type = 'official'
-           LEFT JOIN user_characters uc ON m.user_character_id = uc.id AND m.character_type = 'user'
-           WHERE m.conversation_id = ?
-           ORDER BY m.created_at DESC
-           LIMIT ?
-       ) sub
-       ORDER BY sub.created_at ASC`
-    ).bind(conversationId, limit).all();
-    return results || [];
-  } catch (error) {
-    await logError(error, env, 'Get Recent Messages');
-    return [];
-  }
-}
-
 // 🔧 AutoRAG 메모리 컨텍스트 조회
 async function getAutoragMemoryContext(conversationId, user, env) {
   try {
@@ -700,19 +684,19 @@ async function getAutoragMemoryContext(conversationId, user, env) {
     const keywordPrompt = `다음 대화 내역에서 핵심 키워드를 쉼표로 구분해 나열하세요. (현재 대화중인 주제의 키워드만 나열하며, 대화가 다른 주제로 넘어갔다면 그 이전 대화의 키워드는 무시합니다):\n\n${conversationText}`;
 
     const body = {
-        contents: [{ role: 'user', parts: [{ text: keywordPrompt }] }],
-        generationConfig: { temperature: 0.0, maxOutputTokens: 100 }
+      contents: [{ role: 'user', parts: [{ text: keywordPrompt }] }],
+      generationConfig: { temperature: 0.0, maxOutputTokens: 100 }
     };
 
     let keywords = conversationText.trim(); // Fallback to original text
     try {
-        const keywordData = await callGemini('gemini-2.5-flash-lite', apiKey, body, env, 'AutoRAG Keyword Extraction');
-        const extractedKeywords = keywordData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-        if (extractedKeywords) {
-            keywords = extractedKeywords;
-        }
+      const keywordData = await callGemini('gemini-2.5-flash-lite', apiKey, body, env, 'AutoRAG Keyword Extraction');
+      const extractedKeywords = keywordData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      if (extractedKeywords) {
+        keywords = extractedKeywords;
+      }
     } catch (error) {
-        await logError(error, env, 'AutoRAG Keyword Extraction');
+      await logError(error, env, 'AutoRAG Keyword Extraction');
     }
 
     // Cloudflare AutoRAG로 검색
@@ -783,16 +767,16 @@ function extractAutoragResultsForChat(results) {
           if (typeof result === 'object' && result !== null) {
             // Extract filename from various possible metadata locations
             let filename = result.filename ||
-                         result.metadata?.filename ||
-                         result.metadata?.file ||
-                         result.metadata?.source_file ||
-                         result.source_metadata?.filename ||
-                         result.document_metadata?.filename;
+              result.metadata?.filename ||
+              result.metadata?.file ||
+              result.metadata?.source_file ||
+              result.source_metadata?.filename ||
+              result.document_metadata?.filename;
 
             let source = filename ||
-                        result.source ||
-                        result.metadata?.source ||
-                        `검색 결과 ${index + 1}`;
+              result.source ||
+              result.metadata?.source ||
+              `검색 결과 ${index + 1}`;
 
             return {
               source: source,
@@ -811,11 +795,11 @@ function extractAutoragResultsForChat(results) {
       // Case 3: Results is a single object with text/content
       if (typeof results === 'object' && (results.text || results.content)) {
         let filename = results.filename ||
-                      results.metadata?.filename ||
-                      results.metadata?.file ||
-                      results.metadata?.source_file ||
-                      results.source_metadata?.filename ||
-                      results.document_metadata?.filename;
+          results.metadata?.filename ||
+          results.metadata?.file ||
+          results.metadata?.source_file ||
+          results.source_metadata?.filename ||
+          results.document_metadata?.filename;
 
         extractedResults = [{
           source: filename || results.source || '검색 결과',
@@ -870,8 +854,8 @@ async function getChatHistoryFromDB(conversationId, env) {
               CASE WHEN m.role = 'user' THEN u.nickname ELSE NULL END as nickname,
               COALESCE(c.name, uc.name) as character_name
            FROM messages m
-           LEFT JOIN characters c ON m.character_id = c.id
-           LEFT JOIN user_characters uc ON m.user_character_id = uc.id
+           LEFT JOIN characters c ON m.character_id = c.id AND m.character_type = 'official'
+           LEFT JOIN user_characters uc ON m.user_character_id = uc.id AND m.character_type = 'user'
            LEFT JOIN conversations conv ON m.conversation_id = conv.id
            LEFT JOIN users u ON conv.user_id = u.id
            WHERE m.conversation_id = ?
@@ -1004,12 +988,12 @@ async function getCurrentAutoCallSequence(conversationId, env) {
 }
 
 function uint8ArrayToBinaryString(uint8Array) {
-    let binaryString = '';
-    const chunkSize = 8192;
-    for (let i = 0; i < uint8Array.length; i += chunkSize) {
-        binaryString += String.fromCharCode.apply(null, uint8Array.subarray(i, i + chunkSize));
-    }
-    return binaryString;
+  let binaryString = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < uint8Array.length; i += chunkSize) {
+    binaryString += String.fromCharCode.apply(null, uint8Array.subarray(i, i + chunkSize));
+  }
+  return binaryString;
 }
 
 async function getLatestImagesFromHistory(conversationId, env, limit = 2) {
@@ -1077,17 +1061,17 @@ export async function handleSelectSpeaker(request, env) {
   try {
     const user = await getUserFromToken(request, env);
     if (!user) {
-        return new Response('Unauthorized', { status: 401 });
+      return new Response('Unauthorized', { status: 401 });
     }
 
     const { conversationId } = await request.json();
     if (!conversationId) {
-        return new Response('Missing conversationId', { status: 400 });
+      return new Response('Missing conversationId', { status: 400 });
     }
 
     const participants = await getConversationParticipants(conversationId, env);
     if (participants.length === 0) {
-        return new Response(JSON.stringify({ speaker: null, reason: 'no_participants' }), { headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ speaker: null, reason: 'no_participants' }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     const recentMessages = await getRecentMessages(conversationId, 10, env);
@@ -1103,21 +1087,21 @@ export async function handleSelectSpeaker(request, env) {
 
     const apiKey = user.gemini_api_key || env.GEMINI_API_KEY;
     const body = {
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 1.0, maxOutputTokens: 50 }
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 1.0, maxOutputTokens: 50 }
     };
 
     let nextSpeakerName = null;
     try {
-        const nextSpeakerData = await callGemini('gemini-2.5-flash-lite', apiKey, body, env, 'Select Speaker');
-        nextSpeakerName = nextSpeakerData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      const nextSpeakerData = await callGemini('gemini-2.5-flash-lite', apiKey, body, env, 'Select Speaker');
+      nextSpeakerName = nextSpeakerData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
     } catch (error) {
-        await logError(error, env, 'handleSelectSpeaker');
-        return new Response(JSON.stringify({ speaker: null, reason: 'selection_failed' }), { headers: { 'Content-Type': 'application/json' } });
+      await logError(error, env, 'handleSelectSpeaker');
+      return new Response(JSON.stringify({ speaker: null, reason: 'selection_failed' }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     if (!nextSpeakerName || nextSpeakerName.includes('유저') || nextSpeakerName.includes(userNickname)) {
-        return new Response(JSON.stringify({ speaker: null, reason: 'user_selected' }), { headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ speaker: null, reason: 'user_selected' }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     // Find the selected character with flexible matching
@@ -1128,22 +1112,22 @@ export async function handleSelectSpeaker(request, env) {
 
     // Priority 2: Match on "name(nickname)" format
     if (!selectedCharacter) {
-        selectedCharacter = participants.find(p => nextSpeakerName === `${p.name}(${p.nickname})`);
+      selectedCharacter = participants.find(p => nextSpeakerName === `${p.name}(${p.nickname})`);
     }
 
     // Priority 3: Lenient includes check (handles partial matches)
     if (!selectedCharacter) {
-        selectedCharacter = participants.find(p => nextSpeakerName.includes(p.name) || (p.nickname && nextSpeakerName.includes(p.nickname)));
+      selectedCharacter = participants.find(p => nextSpeakerName.includes(p.name) || (p.nickname && nextSpeakerName.includes(p.nickname)));
     }
 
     if (!selectedCharacter) {
-        return new Response(JSON.stringify({ speaker: null, reason: 'character_not_found' }), { headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ speaker: null, reason: 'character_not_found' }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     const characterDetails = await getCharacterDetails(selectedCharacter.id, selectedCharacter.type, env);
 
     return new Response(JSON.stringify({ speaker: characterDetails }), {
-        headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
@@ -1153,23 +1137,39 @@ export async function handleSelectSpeaker(request, env) {
 }
 
 async function getCharacterDetails(characterId, characterType, env) {
-    let character;
-    if (characterType === 'official') {
-        character = await env.DB.prepare(
-            'SELECT id, name, profile_image FROM characters WHERE id = ?'
-        ).bind(characterId).first();
-    } else {
-        character = await env.DB.prepare(
-            'SELECT id, name, profile_image_r2 FROM user_characters WHERE id = ? AND deleted_at IS NULL'
-        ).bind(characterId).first();
-        if (character && character.profile_image_r2) {
-            character.profile_image = `/api/user-characters/image/${character.profile_image_r2}`;
-        } else if (character) {
-            character.profile_image = '/images/characters/kanade.webp'; // fallback
-        }
-    }
-    if (character) {
-        character.type = characterType;
-    }
-    return character;
+  let character;
+  if (characterType === 'official') {
+    character = await env.DB.prepare(
+      'SELECT id, name, profile_image FROM characters WHERE id = ?'
+    ).bind(characterId).first();
+  } else {
+    character = await env.DB.prepare(
+      'SELECT id, name, profile_image_r2 FROM user_characters WHERE id = ? AND deleted_at IS NULL'
+    ).bind(characterId).first();
+  }
+  return character;
+}
+
+// Helper function to get recent messages
+async function getRecentMessages(conversationId, limit, env) {
+  try {
+    const { results } = await env.DB.prepare(
+      `SELECT * FROM (
+          SELECT
+              m.role, m.content, m.created_at,
+              COALESCE(c.name, uc.name) as character_name
+           FROM messages m
+           LEFT JOIN characters c ON m.character_id = c.id AND m.character_type = 'official'
+           LEFT JOIN user_characters uc ON m.user_character_id = uc.id AND m.character_type = 'user'
+           WHERE m.conversation_id = ?
+           ORDER BY m.created_at DESC
+           LIMIT ?
+       ) sub
+       ORDER BY sub.created_at ASC`
+    ).bind(conversationId, limit).all();
+    return results || [];
+  } catch (error) {
+    await logError(error, env, 'Get Recent Messages');
+    return [];
+  }
 }

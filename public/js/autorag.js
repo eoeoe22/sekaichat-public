@@ -29,9 +29,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- Display Server Status ---
     function displayServerStatus(status) {
         const content = document.getElementById('serverStatusContent');
-        
+
         let html = '<div class="row">';
-        
+
         // Korean server status
         html += '<div class="col-md-6">';
         html += '<h6><i class="bi bi-server"></i> 한국 서버</h6>';
@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             html += '<div class="text-muted small">데이터 없음</div>';
         }
         html += '</div>';
-        
+
         // Japanese server status
         html += '<div class="col-md-6">';
         html += '<h6><i class="bi bi-server"></i> 일본 서버</h6>';
@@ -73,7 +73,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             html += '<div class="text-muted small">데이터 없음</div>';
         }
         html += '</div>';
-        
+
         html += '</div>';
         content.innerHTML = html;
     }
@@ -97,7 +97,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     function addLog(message, type = 'info') {
         const now = new Date();
         const timestamp = now.toLocaleTimeString('ko-KR', { hour12: false });
-        
+
         let icon = 'bi-info-circle';
         let color = 'text-dark';
 
@@ -119,7 +119,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const logEntry = document.createElement('p');
         logEntry.className = `mb-1 ${color}`;
         logEntry.innerHTML = `<small><i class="bi ${icon}"></i> [${timestamp}] ${escapeHtml(message)}</small>`;
-        
+
         const initialMessage = logContainer.querySelector('.text-muted');
         if (initialMessage) {
             logContainer.innerHTML = '';
@@ -137,7 +137,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         const mode = aiSearchMode.checked ? 'ai' : 'normal';
-        
+
         toggleLoading(true);
         resultsContainer.innerHTML = '';
         logContainer.innerHTML = '<p class="text-muted mb-0">작업을 시작하려면 검색 버튼을 누르세요.</p>';
@@ -166,7 +166,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             const data = await response.json();
-            
+
             if (data.error) {
                 addLog(`서버에서 오류 응답: ${data.error}`, 'error');
                 console.error('서버에서 반환된 오류:', data.error);
@@ -242,7 +242,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     </div>`;
             }
         }
-        
+
         return `<div class="result-line other-line">${escapeHtml(trimmedLine)}</div>`;
     }
 
@@ -263,7 +263,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (data.results && data.results.length > 0) {
             addLog(`${data.results.length}개의 검색 결과를 찾았습니다.`, 'success');
-            
+
             data.results.forEach((result, index) => {
                 let textToFormat = '';
 
@@ -290,10 +290,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const formattedContent = lines.map(formatLine).join('');
 
                 let filenameDisplay = '';
+                let expandButton = '';
                 if (result.filename) {
                     filenameDisplay = `<small class="text-muted d-block mt-1"><i class="bi bi-file-earmark"></i> 파일: ${escapeHtml(result.filename)}</small>`;
+                    expandButton = `<button class="btn btn-sm btn-outline-primary mt-2 expand-btn" data-filename="${escapeHtml(result.filename)}" data-expanded="false"><i class="bi bi-arrows-expand"></i> 전체 보기</button>`;
                 }
-                
+
                 const resultCard = `
                     <div class="card mb-3">
                         <div class="card-header d-flex justify-content-between align-items-center">
@@ -304,15 +306,77 @@ document.addEventListener('DOMContentLoaded', async () => {
                             <span class="badge bg-secondary">결과 ${index + 1}</span>
                         </div>
                         <div class="card-body">
-                            ${formattedContent}
+                            <div class="partial-content">${formattedContent}</div>
+                            <div class="full-content" style="display: none;"></div>
+                            ${expandButton}
                         </div>
                     </div>
                 `;
                 resultsContainer.innerHTML += resultCard;
             });
+
+            // Add click handlers to expand buttons
+            document.querySelectorAll('.expand-btn').forEach(btn => {
+                btn.addEventListener('click', handleExpandClick);
+            });
         } else {
             addLog('검색 결과가 없습니다.');
             resultsContainer.innerHTML += '<div class="alert alert-secondary">검색 결과가 없습니다.</div>';
+        }
+    }
+
+    async function handleExpandClick(event) {
+        const btn = event.currentTarget;
+        const filename = btn.dataset.filename;
+        const isExpanded = btn.dataset.expanded === 'true';
+        const cardBody = btn.closest('.card-body');
+        const partialContent = cardBody.querySelector('.partial-content');
+        const fullContent = cardBody.querySelector('.full-content');
+        const server = document.querySelector('input[name="server"]:checked').value;
+
+        if (isExpanded) {
+            // Collapse: show partial, hide full
+            partialContent.style.display = 'block';
+            fullContent.style.display = 'none';
+            btn.dataset.expanded = 'false';
+            btn.innerHTML = '<i class="bi bi-arrows-expand"></i> 전체 보기';
+        } else {
+            // Expand: fetch full content if not loaded
+            if (!fullContent.innerHTML) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 로딩중...';
+
+                try {
+                    const response = await fetch('/api/autorag/full-content', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ filename, server })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch full content');
+                    }
+
+                    const data = await response.json();
+                    const lines = data.content.split(/\r\n|\n/);
+                    const formattedFullContent = lines.map(formatLine).join('');
+                    fullContent.innerHTML = formattedFullContent;
+                    addLog(`전체 내용 로드 완료: ${filename}`, 'success');
+                } catch (error) {
+                    console.error('Error fetching full content:', error);
+                    addLog(`전체 내용 로드 실패: ${error.message}`, 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-arrows-expand"></i> 전체 보기';
+                    return;
+                }
+            }
+
+            // Show full, hide partial
+            partialContent.style.display = 'none';
+            fullContent.style.display = 'block';
+            btn.dataset.expanded = 'true';
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-arrows-collapse"></i> 접기';
         }
     }
 

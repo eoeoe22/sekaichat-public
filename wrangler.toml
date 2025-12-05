@@ -4,14 +4,23 @@ compatibility_date = "2023-12-01"
 assets = { directory = "./public" }
 
 
+[triggers]
+crons = ["0 0 * * *"] # Run daily at midnight UTC
+
+
 [[d1_databases]]
 binding = "DB"
 database_name = "sekai-chat"
-database_id = "  "
+database_id = ""
 
 [[d1_databases]]
 binding = "KANADE_DB"
 database_name = "kanade"
+database_id = ""
+
+[[d1_databases]]
+binding = "VOCALOID_DB"
+database_name = "vocaloid-rag"
 database_id = ""
 
 # 메인 바인딩
@@ -29,34 +38,38 @@ bucket_name = "vectorize-jp"
 binding = "AutoRAG1"
 bucket_name = "vectorize"
 
+[[r2_buckets]]
+binding = "VOCALOID_BUCKET"
+bucket_name = "vocaloid"
+
 [[kv_namespaces]]
 binding = "KV"
-id = "  "
+id = ""
 
 [ai]
 binding = "AI"
-
 
 [observability]
 enabled = true
 head_sampling_rate = 1.0
 
 [vars]
+update_token = "2"
 GEMINI_API_KEY = ""
 TTS_SERVICE_URL = ""
 TTS_SERVICE_URL_FALLBACK = ""
 TTS_API_KEY = ""
 
-TURNSTILE_SITE_KEY = ""
+TURNSTILE_SITE_KEY = "0x4AAAAAABkrf7cd8w3d1nxe"
 TURNSTILE_SECRET_KEY = ""
 DOMAIN = "sekaich.at"
 JWT_SECRET = ""
 IMAGE_GENERATION_CHARACTERS = "0,3"
 DISCORD_CLIENT_ID = ""
-DISCORD_CLIENT_SECRET = ""
-DISCORD_REDIRECT_URI = "https://sekaich.at/auth/discord/callback"
+DISCORD_CLIENT_SECRET = "---"
+DISCORD_REDIRECT_URI = ""
 25FLASH_IMAGE = "true"
-AI_GATEWAY_TOKEN = ""
+AI_GATEWAY_TOKEN = "-"
 
 IMAGE_GENERATION_PROMPT = """
 이미지 생성 기능 사용법 : 그림을 그려달라는 요청을 받으면, 메시지에 <<여기에 그림에 대한 영어 프롬프트>>형식으로 이미지 생성 명령을 포함합니다. 프롬프트는 반드시 영어로, 구체적이고 상세하게 작성해주세요. 또 특별히 사용자가 스타일을 언급하지 않았다면, 연필 스케치 스타일로 이미지를 생성하세요. 이미지 생성 명령은 외부 시스템에 의해 자동으로 이미지로 변환될것입니다.
@@ -85,7 +98,7 @@ COMMON_RULES_PROMPT = """
 - 사용자에게 기본적으로 친근하게 말투을 사용하며, '~아', 또는 닉네임 그대로 호칭등 친근하게 부릅니다. (~님 금지)
 - 특정한 말투나 표현을 반복해서 사용하는것을 자제하세요.
 
-★매우 중요한 규칙 
+★★★ 매우 중요한 규칙 ★★★
 - 당신은 오직 한 명의 캐릭터입니다. 절대로 다른 캐릭터의 대사나 행동을 대신 생성하지 마세요.
 - 한 번의 응답에서는 오직 자신의 캐릭터만의 메시지를 "한개만" 작성합니다.
 - 캐릭터명 : 형식으로 응답하지 마세요. 메시지 내용만 작성하세요.
@@ -98,6 +111,8 @@ COMMON_RULES_PROMPT = """
 
 
 """
+
+
 
 
 

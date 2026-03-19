@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
         unlinkDiscordBtn.addEventListener('click', unlinkDiscord);
         saveSekaiSettingsBtn.addEventListener('click', saveSekaiPreferences);
         saveTtsLanguageBtn.addEventListener('click', updateTtsLanguageSetting);
-        
+
         // 내 캐릭터 관련 이벤트는 user-characters.js에서 처리
         // 데이터 이전 관련 이벤트
         if (migrationContainer) {
@@ -96,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const discordAvatar = document.getElementById('discordAvatar');
             const discordUsername = document.getElementById('discordUsername');
-            
+
             if (userInfo.discord_avatar) {
                 discordAvatar.src = `https://cdn.discordapp.com/avatars/${userInfo.discord_id}/${userInfo.discord_avatar}.png`;
             } else {
@@ -149,20 +149,29 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         const formData = new FormData(e.target);
         const newNickname = formData.get('new_nickname');
-        
+
         if (!newNickname || newNickname.trim() === '') {
-            alert('새 닉네임을 입력해주세요.');
+            Swal.fire({
+                icon: 'warning',
+                text: '새 닉네임을 입력해주세요.'
+            });
             return;
         }
 
         try {
             await postUserUpdate({ type: 'nickname', new_nickname: newNickname });
-            alert('닉네임이 변경되었습니다.');
+            Swal.fire({
+                icon: 'success',
+                text: '닉네임이 변경되었습니다.'
+            });
             await loadUserInfo();
             updateUI();
             e.target.reset();
         } catch (error) {
-            alert(`닉네임 변경 실패: ${error.message}`);
+            Swal.fire({
+                icon: 'error',
+                text: `닉네임 변경 실패: ${error.message}`
+            });
         }
     }
 
@@ -173,11 +182,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             await postUserUpdate({ type: 'self_introduction', self_introduction: selfIntroduction });
-            alert('자기소개가 저장되었습니다.');
+            Swal.fire({
+                icon: 'success',
+                text: '자기소개가 저장되었습니다.'
+            });
             await loadUserInfo();
             updateUI();
         } catch (error) {
-            alert(`자기소개 저장 실패: ${error.message}`);
+            Swal.fire({
+                icon: 'error',
+                text: `자기소개 저장 실패: ${error.message}`
+            });
         }
     }
 
@@ -188,7 +203,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const confirmPassword = formData.get('confirm_password');
 
         if (newPassword !== confirmPassword) {
-            alert('새 비밀번호가 일치하지 않습니다.');
+            Swal.fire({
+                icon: 'warning',
+                text: '새 비밀번호가 일치하지 않습니다.'
+            });
             return;
         }
 
@@ -198,10 +216,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 current_password: formData.get('current_password'),
                 new_password: newPassword
             });
-            alert('비밀번호가 변경되었습니다.');
+            Swal.fire({
+                icon: 'success',
+                text: '비밀번호이 변경되었습니다.'
+            });
             e.target.reset();
         } catch (error) {
-            alert(`비밀번호 변경 실패: ${error.message}`);
+            Swal.fire({
+                icon: 'error',
+                text: `비밀번호 변경 실패: ${error.message}`
+            });
         }
     }
 
@@ -209,11 +233,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const maxSequence = document.getElementById('maxAutoCall').value;
         try {
             await postUserUpdate({ type: 'max_auto_call_sequence', max_auto_call_sequence: maxSequence });
-            alert('설정이 저장되었습니다.');
+            Swal.fire({
+                icon: 'success',
+                text: '설정이 저장되었습니다.'
+            });
             await loadUserInfo();
             updateUI();
         } catch (error) {
-            alert(`설정 저장 실패: ${error.message}`);
+            Swal.fire({
+                icon: 'error',
+                text: `설정 저장 실패: ${error.message}`
+            });
         }
     }
 
@@ -221,11 +251,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const ttsLanguage = document.querySelector('input[name="ttsLanguage"]:checked').value;
         try {
             await postUserUpdate({ type: 'tts_language_preference', tts_language_preference: ttsLanguage });
-            alert('TTS 언어 설정이 저장되었습니다.');
+            Swal.fire({
+                icon: 'success',
+                text: 'TTS 언어 설정이 저장되었습니다.'
+            });
             await loadUserInfo();
             updateUI();
         } catch (error) {
-            alert(`TTS 언어 설정 저장 실패: ${error.message}`);
+            Swal.fire({
+                icon: 'error',
+                text: `TTS 언어 설정 저장 실패: ${error.message}`
+            });
         }
     }
 
@@ -236,41 +272,86 @@ document.addEventListener('DOMContentLoaded', () => {
         const apiKey = formData.get('api_key');
 
         if (apiKey === '●●●●●●●●●●●●●●●●') {
-            alert('새로운 API 키를 입력해주세요.');
+            Swal.fire({
+                icon: 'warning',
+                text: '새로운 API 키를 입력해주세요.'
+            });
             return;
         }
 
         try {
             await postUserUpdate({ type: 'api_key', api_key: apiKey });
-            alert('API 키가 등록/변경되었습니다.');
+            Swal.fire({
+                icon: 'success',
+                text: 'API 키가 등록/변경되었습니다.'
+            });
             await loadUserInfo();
             updateUI();
         } catch (error) {
-            alert(`API 키 관리 실패: ${error.message}`);
+            Swal.fire({
+                icon: 'error',
+                text: `API 키 관리 실패: ${error.message}`
+            });
         }
     }
 
     async function deleteApiKey() {
-        if (!confirm('API 키를 삭제하시겠습니까?')) return;
+        const result = await Swal.fire({
+            title: 'API 키 삭제',
+            text: 'API 키를 삭제하시겠습니까?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: '삭제',
+            cancelButtonText: '취소'
+        });
+
+        if (!result.isConfirmed) return;
+
         try {
             await postUserUpdate({ type: 'delete_api_key' });
-            alert('API 키가 삭제되었습니다.');
+            Swal.fire({
+                icon: 'success',
+                text: 'API 키가 삭제되었습니다.'
+            });
             await loadUserInfo();
             updateUI();
         } catch (error) {
-            alert(`API 키 삭제 실패: ${error.message}`);
+            Swal.fire({
+                icon: 'error',
+                text: `API 키 삭제 실패: ${error.message}`
+            });
         }
     }
 
     async function unlinkDiscord() {
-        if (!confirm('Discord 연동을 해제하시겠습니까?')) return;
+        const result = await Swal.fire({
+            title: 'Discord 연동 해제',
+            text: 'Discord 연동을 해제하시겠습니까?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: '해제',
+            cancelButtonText: '취소'
+        });
+
+        if (!result.isConfirmed) return;
+
         try {
             await postUserUpdate({ type: 'unlink_discord' });
-            alert('Discord 연동이 해제되었습니다.');
+            Swal.fire({
+                icon: 'success',
+                text: 'Discord 연동이 해제되었습니다.'
+            });
             await loadUserInfo();
             updateUI();
         } catch (error) {
-            alert(`Discord 연동 해제 실패: ${error.message}`);
+            Swal.fire({
+                icon: 'error',
+                text: `Discord 연동 해제 실패: ${error.message}`
+            });
         }
     }
 
@@ -278,7 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch('/api/user/sekai-preferences');
             if (!response.ok) {
-                throw new Error('세계관 설정 로드 실패');
+                throw new Error('캐릭터 카테고리 설정 로드 실패');
             }
             const preferences = await response.json();
             sekaiFilterContainer.innerHTML = '';
@@ -300,7 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 sekaiFilterContainer.appendChild(div);
             });
         } catch (error) {
-            console.error('세계관 설정 로드 실패:', error);
+            console.error('캐릭터 카테고리 설정 로드 실패:', error);
         }
     }
 
@@ -321,9 +402,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(await response.text());
             }
 
-            alert('세계관 설정이 저장되었습니다.');
+            Swal.fire({
+                icon: 'success',
+                text: '캐릭터 카테고리 설정이 저장되었습니다.'
+            });
         } catch (error) {
-            alert(`저장 실패: ${error.message}`);
+            Swal.fire({
+                icon: 'error',
+                text: `저장 실패: ${error.message}`
+            });
         }
     }
 
@@ -345,7 +432,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return response.json();
     }
-    
+
     // --- 데이터 이전 (Migration) 로직 ---
     function setupMigrationEventListeners() {
         const kanadeLoginForm = document.getElementById('kanadeLoginForm');
@@ -378,7 +465,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('kanadeLoginSection').style.display = 'none';
             document.getElementById('conversationSelectSection').style.display = 'block';
             errorMessage.style.display = 'none';
-            
+
             await loadKanadeConversations();
         } catch (error) {
             errorMessage.textContent = error.message;
@@ -466,7 +553,10 @@ document.addEventListener('DOMContentLoaded', () => {
     async function startMigration() {
         const selectedConversations = Array.from(document.querySelectorAll('#kanadeConversationList input[type="checkbox"]:checked')).map(input => parseInt(input.value));
         if (selectedConversations.length === 0) {
-            alert('이전할 대화내역을 하나 이상 선택해주세요.');
+            Swal.fire({
+                icon: 'warning',
+                text: '이전할 대화내역을 하나 이상 선택해주세요.'
+            });
             return;
         }
 
@@ -490,7 +580,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const data = await response.json();
             updateProgress(data.total, data.migrated);
-            
+
             document.getElementById('migrationProgressSection').style.display = 'none';
             document.getElementById('migrationResultSection').style.display = 'block';
             document.getElementById('migrationResultMessage').textContent = `총 ${data.total}개의 대화 중 ${data.migrated}개를 성공적으로 이전했습니다.`;
@@ -511,13 +601,53 @@ document.addEventListener('DOMContentLoaded', () => {
         migrationProgressBar.setAttribute('aria-valuenow', percentage);
         migrationStatus.textContent = `${migrated} / ${total} 개 이전 완료`;
     }
-    
+
     function escapeHtml(text) {
         if (typeof text !== 'string') return '';
         const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
         return text.replace(/[&<>"']/g, m => map[m]);
     }
 
+    // --- Fetch Page Specific Notice (Toast) ---
+    async function loadPageNotice() {
+        try {
+            const response = await fetch('/api/notice?type=settings');
+            if (response.ok) {
+                const notices = await response.json();
+                if (Array.isArray(notices) && notices.length > 0) {
+                    const noticeHtml = notices.map(n => n.content).join('<br><br>');
+                    Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false,
+                        showCloseButton: true,
+                        timer: 5000,
+                        timerProgressBar: true,
+                        icon: 'info',
+                        title: '공지사항',
+                        html: noticeHtml,
+                        didOpen: (toast) => {
+                            const closeBtn = toast.querySelector('.swal2-close');
+                            if (closeBtn) closeBtn.style.display = 'none';
+
+                            toast.addEventListener('mouseenter', () => {
+                                Swal.stopTimer();
+                                if (closeBtn) closeBtn.style.display = 'flex';
+                            });
+                            toast.addEventListener('mouseleave', () => {
+                                Swal.resumeTimer();
+                                if (closeBtn) closeBtn.style.display = 'none';
+                            });
+                        }
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('페이지 공지 로드 실패:', error);
+        }
+    }
+
     // --- 페이지 초기화 실행 ---
     initializeSettings();
+    loadPageNotice();
 });

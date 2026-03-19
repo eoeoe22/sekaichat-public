@@ -1,32 +1,6 @@
-import { logError, verifyJwt, callGemini } from './utils.js';
+import { logError, getUserFromRequest, callGemini, callGeminiStream, callGeminiViaProxy } from './utils.js';
 import { getExtendedCharacterPrompt } from './user-characters.js';
-
-// JWT 토큰에서 사용자 정보 추출
-async function getUserFromToken(request, env) {
-  try {
-    const cookies = request.headers.get('Cookie');
-    if (!cookies) return null;
-
-    const tokenMatch = cookies.match(/token=([^;]+)/);
-    if (!tokenMatch) return null;
-
-    const token = tokenMatch[1];
-    const tokenData = await verifyJwt(token, env);
-    if (!tokenData) return null;
-
-    const user = await env.DB.prepare('SELECT * FROM users WHERE id = ?')
-      .bind(tokenData.userId).first();
-
-    if (!user) {
-      await logError(new Error(`User not found in database for ID: ${tokenData.userId}`), env, 'Gemini: GetUserFromToken');
-    }
-
-    return user;
-  } catch (error) {
-    await logError(error, env, 'Gemini: GetUserFromToken');
-    return null;
-  }
-}
+import { updateConversationTitle } from './conversations.js';
 
 // 현재 서울 시간 반환
 function getCurrentSeoulTime() {
@@ -41,50 +15,7 @@ function getCurrentSeoulTime() {
   }).format(new Date());
 }
 
-// 이미지 생성 지원 캐릭터 확인
-async function supportsImageGeneration(characterId, characterType, env) {
-  try {
-    console.log(`Checking image generation support for characterId: ${characterId}, characterType: ${characterType}`);
-    // Official characters: ID 3 or 8
-    if (characterType === 'official') {
-      const allowedIdsString = env.IMAGE_GENERATION_CHARACTERS || '';
-      const allowedIds = allowedIdsString.split(',').map(id => parseInt(id.trim()));
-      const isAllowed = allowedIds.includes(characterId);
-      console.log(`Allowed IDs: [${allowedIds.join(', ')}], Is character ID ${characterId} allowed? ${isAllowed}`);
-      return isAllowed;
-    }
 
-    // Custom user characters: ID >= 10000 and exists in user_characters table
-    if (characterType === 'user') {
-      if (characterId < 10000) return false;
-
-      const exists = await env.DB.prepare(
-        'SELECT id FROM user_characters WHERE id = ? AND deleted_at IS NULL'
-      ).bind(characterId).first();
-
-      return !!exists;
-    }
-
-    return false;
-  } catch (error) {
-    await logError(error, env, 'Check Image Generation Support');
-    return false;
-  }
-}
-
-// 이미지 프롬프트 파싱 및 처리
-function parseImagePrompt(content) {
-  const imagePromptPattern = /<<([^<>]+)>>/g;
-  const matches = [...content.matchAll(imagePromptPattern)];
-
-  if (matches.length > 0) {
-    const prompts = matches.map(match => match[1].trim());
-    const cleanContent = content.replace(imagePromptPattern, '').trim();
-    return { cleanContent, imagePrompts: prompts };
-  }
-
-  return { cleanContent: content, imagePrompts: [] };
-}
 
 // ===== 추가: base64 디코딩 유틸 =====
 function base64ToUint8Array(base64) {
@@ -98,67 +29,16 @@ function base64ToUint8Array(base64) {
   return bytes;
 }
 
-// 생성된 이미지를 R2에 저장 (유연 처리로 수정)
-async function saveImageToR2(imageData, env) {
-  try {
-    if (!imageData) throw new TypeError('imageData 값이 없습니다.');
 
-    let body = null;
-
-    if (typeof imageData === 'string') {
-      body = base64ToUint8Array(imageData);
-    } else if (imageData.uint8 instanceof Uint8Array) {
-      body = imageData.uint8;
-    } else if (imageData.arrayBuffer instanceof ArrayBuffer) {
-      body = new Uint8Array(imageData.arrayBuffer);
-    } else if (imageData.image) {
-      body = base64ToUint8Array(imageData.image);
-    } else if (Array.isArray(imageData.images) && imageData.images[0]) {
-      body = base64ToUint8Array(imageData.images[0]);
-    } else if (ArrayBuffer.isView(imageData)) {
-      body = imageData;
-    } else if (imageData instanceof ArrayBuffer) {
-      body = new Uint8Array(imageData);
-    }
-
-    if (!body) {
-      throw new TypeError('지원하지 않는 imageData 타입입니다.');
-    }
-
-    const fileName = `generated_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.png`;
-    const key = `generated_images/${fileName}`;
-
-    await env.R2.put(key, body, {
-      httpMetadata: {
-        contentType: 'image/png'
-      }
-    });
-
-    return { fileName, key };
-  } catch (error) {
-    await logError(error, env, 'Save Image to R2');
-    return null;
-  }
-}
 
 // 캐릭터 호출 시스템 안내
 const CHARACTER_CALL_SYSTEM = `
 [다른 캐릭터 호출]
-기본 규칙:
-• 다른 캐릭터를 호출하려면 @캐릭터명을 메시지 마지막에 적어주세요
-• 한번에 오직 한 명의 캐릭터만 호출 가능합니다
-• 호출문은 반드시 메시지의 맨 마지막에 위치해야 합니다
 
-올바른 예시:
-   "카나데, 이 부분 어떻게 생각해? @요이사키 카나데"
-
-잘못된 예시:
-   "@요이사키 카나데, 이 부분 어떻게 생각해?"
-   → 호출문이 메시지 맨 마지막에 있어야 합니다
-
-잘못된 예시 2:
-   "다들 이 부분 어떻게 생각하는지 말해줘. @요이사키 카나데 @아키야마 미즈키"
-   → 여러명을 동시에 호출할 수 없습니다
+다른 캐릭터가 다음으로 말하며 대화를 이어가게 하려는 경우, 캐릭터의 이름을 명시적으로 메시지에 포함하세요. 
+특별한 호출 명령어를 사용할 필요는 없으며, 자연스러운 대화처럼 이름을 부르세요.
+자기 자신을 호출하지 마세요.
+호출 기능 이용은 필수가 아니며, 필요한 경우에만 적절히 사용하세요.
 
 현재 호출 가능한 대화 참여 캐릭터:
    {participantsList}
@@ -168,7 +48,7 @@ export async function handleChat(request, env) {
   try {
     const { message, model, conversationId, imageData, role = 'user' } = await request.json();
 
-    const user = await getUserFromToken(request, env);
+    const user = await getUserFromRequest(request, env);
     if (!user) return new Response('으....이....', { status: 401 });
 
     // 사용자 존재 여부 확인 (Foreign Key 제약조건 오류 방지)
@@ -178,6 +58,15 @@ export async function handleChat(request, env) {
     if (!userExists) {
       await logError(new Error(`User ID ${user.id} from JWT token does not exist in database`), env, 'Handle Chat - User Validation');
       return new Response('Invalid user session. Please login again.', { status: 401 });
+    }
+
+    // 대화방 소유권 확인
+    const conversation = await env.DB.prepare(
+      'SELECT id FROM conversations WHERE id = ? AND user_id = ?'
+    ).bind(conversationId, user.id).first();
+
+    if (!conversation) {
+      return new Response('대화방을 찾을 수 없거나 접근 권한이 없습니다.', { status: 404 });
     }
 
     await updateConversationTitle(conversationId, message, env);
@@ -198,76 +87,43 @@ export async function handleChat(request, env) {
 
 
 
-// Generate image using Workers AI (Flux model)
-async function generateImageWithWorkersAI(prompt, env) {
-  try {
-    const use25Flash = env['25FLASH_IMAGE'] === 'true';
 
-    const response = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
-      prompt: prompt,
-      steps: use25Flash ? 3 : 4,
-      width: use25Flash ? 400 : 512,
-      height: use25Flash ? 400 : 512
-    });
-    return response;
-  } catch (error) {
-    await logError(error, env, 'Generate Image with Workers AI');
-    return null;
-  }
-}
 
-// Generate image using Gemini 2.0 Flash Preview Image Generation model with optional reference images
-// Supports image-to-image functionality by including the most recent image from conversation
-async function generateImageWithGemini(prompt, env, apiKey, latestImages = []) {
-  const parts = [{ text: prompt }];
-  if (latestImages && latestImages.length > 0) {
-    const imagesToUse = latestImages.slice(-2).reverse();
-    for (const recentImage of imagesToUse) {
-      if (recentImage && recentImage.base64Data && recentImage.mimeType) {
-        parts.push({
-          inlineData: {
-            mimeType: recentImage.mimeType,
-            data: recentImage.base64Data
-          }
-        });
-      }
-    }
-  }
 
-  const body = {
-    contents: [{ parts: parts }],
-    generationConfig: {
-      responseModalities: ["TEXT", "IMAGE"]
-    }
-  };
-
-  try {
-    const data = await callGemini('gemini-2.0-flash-preview-image-generation', apiKey, body, env, 'Generate Image with Gemini');
-    if (!data.candidates?.[0]?.content?.parts) {
-      throw new Error('Invalid response structure from Gemini API');
-    }
-    const imagePart = data.candidates[0].content.parts.find(part => part.inlineData);
-    if (imagePart?.inlineData?.data && imagePart?.inlineData?.mimeType) {
-      return {
-        base64Data: imagePart.inlineData.data,
-        mimeType: imagePart.inlineData.mimeType
-      };
-    }
-    throw new Error('No image data found in Gemini API response');
-  } catch (error) {
-    await logError(error, env, 'Generate Image with Gemini');
-    return null;
-  }
-}
 
 export async function handleCharacterGeneration(request, env) {
-  try {
-    const { characterId, conversationId, imageData, workMode, showTime, situationPrompt, imageGenerationEnabled, imageCooldownSeconds, autoCallCount, selectedModel } = await request.json();
+  // 요청 본문을 미리 파싱하고 변수들을 상위 스코프에 선언
+  let characterId, conversationId, imageData, workMode, showTime, situationPrompt;
+  let autoCallCount, thinkingLevel, isContinuous;
+  let user, participant, history, characterPrompt, maxAutoCallSequence, participants;
+  let commonRulesPrompt, currentTime, latestImages, apiKey, autoragContext;
 
-    const user = await getUserFromToken(request, env);
+  try {
+    const requestBody = await request.json();
+    characterId = requestBody.characterId;
+    conversationId = requestBody.conversationId;
+    imageData = requestBody.imageData;
+    workMode = requestBody.workMode;
+    showTime = requestBody.showTime;
+    situationPrompt = requestBody.situationPrompt;
+
+    autoCallCount = requestBody.autoCallCount;
+    thinkingLevel = requestBody.thinkingLevel;
+    isContinuous = requestBody.isContinuous;
+
+    user = await getUserFromRequest(request, env);
     if (!user) return new Response('으....이....', { status: 401 });
 
-    const participant = await env.DB.prepare(
+    // 대화방 소유권 확인
+    const conversation = await env.DB.prepare(
+      'SELECT id FROM conversations WHERE id = ? AND user_id = ?'
+    ).bind(conversationId, user.id).first();
+
+    if (!conversation) {
+      return new Response('대화방을 찾을 수 없거나 접근 권한이 없습니다.', { status: 404 });
+    }
+
+    participant = await env.DB.prepare(
       'SELECT character_type FROM conversation_participants WHERE conversation_id = ? AND character_id = ?'
     ).bind(conversationId, characterId).first();
 
@@ -275,15 +131,15 @@ export async function handleCharacterGeneration(request, env) {
       return new Response('참여하지 않은 캐릭터입니다.', { status: 400 });
     }
 
-    const history = await getChatHistory(conversationId, env);
-    const characterPrompt = await getExtendedCharacterPrompt(characterId, env);
+    history = await getChatHistory(conversationId, env);
+    characterPrompt = await getExtendedCharacterPrompt(characterId, env);
     if (!characterPrompt) return new Response('캐릭터를 찾을 수 없습니다.', { status: 404 });
 
-    const maxAutoCallSequence = user.max_auto_call_sequence || 3;
-    const participants = await getConversationParticipants(conversationId, env);
-    const autoragContext = await getAutoragMemoryContext(conversationId, user, env);
+    maxAutoCallSequence = user.max_auto_call_sequence || 3;
+    participants = await getConversationParticipants(conversationId, env);
+    autoragContext = await getAutoragMemoryContext(conversationId, user, env);
 
-    let commonRulesPrompt = '';
+    commonRulesPrompt = '';
     if (characterId !== 0) {
       if (workMode) {
         commonRulesPrompt = env.WORK_MODE_PROMPT;
@@ -292,138 +148,121 @@ export async function handleCharacterGeneration(request, env) {
       }
     }
 
-    const currentTime = showTime ? getCurrentSeoulTime() : null;
-    let latestImages = imageData ? [imageData] : await getLatestImagesFromHistory(conversationId, env);
-
-    const apiKey = user.gemini_api_key || env.GEMINI_API_KEY;
-
-    // Use Gemini API for character message generation
-    const textResponse = await callGeminiAPI(
-      characterPrompt, commonRulesPrompt, history, user.nickname, user.self_introduction,
-      apiKey, currentTime, latestImages, autoCallCount || 0, maxAutoCallSequence,
-      participants, situationPrompt, characterId, participant.character_type,
-      imageGenerationEnabled, env, imageCooldownSeconds || 0, conversationId, autoragContext, selectedModel
-    );
-
-    let processedContent = textResponse;
-    // Gemini API가 JSON 형식의 문자열로 응답하는 경우를 처리
-    if (typeof textResponse === 'string' && textResponse.trim().startsWith('{')) {
-      try {
-        const responseObject = JSON.parse(textResponse);
-        // JSON 응답에 에러가 포함된 경우
-        if (responseObject.error) {
-          await logError(new Error(`Gemini returned a JSON error: ${textResponse}`), env, 'Character Generation - JSON Error');
-          // 사용자에게 표시될 수 있는 일반적인 오류 메시지로 처리
-          processedContent = "오류가 발생하여 응답을 생성할 수 없습니다.";
-        } else {
-          // 'text', 'message' 또는 'response' 필드에서 실제 응답 내용을 추출
-          processedContent = responseObject.response || responseObject.text || responseObject.message || processedContent;
-        }
-      } catch (e) {
-        // 유효한 JSON이 아니면 일반 텍스트로 처리 (기존 동작 유지)
-        await logError(new Error(`Failed to parse potential JSON response: ${textResponse}`), env, 'Character Generation - JSON Parse Fail');
-      }
-    }
-    let generatedImages = [];
-
-    // Parse image prompts from response first
-    const { cleanContent, imagePrompts } = parseImagePrompt(textResponse);
-    processedContent = cleanContent;
-
-    // Only run image generation if there are actual image prompts and the feature is enabled
-    if (imageGenerationEnabled && imagePrompts.length > 0 && await supportsImageGeneration(characterId, participant.character_type, env)) {
-      for (const prompt of imagePrompts) {
-        try {
-          // Check 25FLASH_IMAGE setting to decide which image generation method to use
-          const use25Flash = env['25FLASH_IMAGE'] === 'true';
-          let imageResult = null;
-          let imageData = null;
-
-          if (use25Flash) {
-            // Use Gemini API for image generation when 25FLASH_IMAGE is true
-            imageResult = await generateImageWithGemini(prompt, env, apiKey, latestImages);
-            if (imageResult && imageResult.base64Data) {
-              imageData = imageResult.base64Data;
-            }
-          } else {
-            // Use Workers AI (Flux) for image generation when 25FLASH_IMAGE is false
-            imageResult = await generateImageWithWorkersAI(prompt, env);
-            if (imageResult) {
-              imageData = imageResult; // Workers AI returns the image buffer directly
-            }
-          }
-
-          if (imageData) {
-            const savedImage = await saveImageToR2(imageData, env);
-            if (savedImage) {
-              // Save generated image to files table
-              const fileResult = await env.DB.prepare(
-                'INSERT INTO files (user_id, filename, original_name, file_size, mime_type, r2_key) VALUES (?, ?, ?, ?, ?, ?) RETURNING id'
-              ).bind(
-                user.id,
-                `generated/${savedImage.fileName}`, // Add generated/ prefix for correct image serving
-                `Generated: ${prompt}`,
-                0, // File size not available for generated images
-                'image/png',
-                savedImage.key
-              ).first();
-
-              // Save generated image as message record
-              await env.DB.prepare(
-                'INSERT INTO messages (conversation_id, role, content, character_id, user_character_id, message_type, file_id, user_id, character_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-              ).bind(
-                conversationId,
-                'assistant',
-                `🖼️ "${prompt}"`,
-                participant.character_type === 'official' ? characterId : null,
-                participant.character_type === 'user' ? characterId : null,
-                'image',
-                fileResult.id,
-                user.id,
-                participant.character_type
-              ).run();
-
-              generatedImages.push({
-                prompt: prompt,
-                fileName: savedImage.fileName,
-                url: `/api/images/generated/${savedImage.fileName}`
-              });
-            }
-          }
-        } catch (error) {
-          await logError(error, env, `Process Image Generation (${env['25FLASH_IMAGE'] === 'true' ? 'Gemini' : 'Workers AI'})`);
-        }
-      }
-
-      // Refresh chat history cache if images were generated
-      if (generatedImages.length > 0) {
-        await refreshChatHistoryCache(conversationId, env);
-      }
-    }
-
-    const { cleanContent: finalContent, calledCharacter } = parseCharacterCall(processedContent);
-
-    const newMessage = await saveChatMessage(conversationId, 'assistant', finalContent, env, characterId, autoCallCount || 0, null, participant.character_type);
-
-    return new Response(JSON.stringify({
-      response: finalContent,
-      calledCharacter,
-      newMessage: newMessage,
-      generatedImages: generatedImages, // Keep for profile updates
-      imageGenerationAttempted: imageGenerationEnabled && imagePrompts.length > 0
-    }), {
-      headers: { 'Content-Type': 'application/json' }
-    });
+    currentTime = showTime ? getCurrentSeoulTime() : null;
+    latestImages = imageData ? [imageData] : await getLatestImagesFromHistory(conversationId, env);
+    apiKey = user.gemini_api_key || env.GEMINI_API_KEY;
 
   } catch (error) {
-    await logError(error, env, 'Character Generation');
+    await logError(error, env, 'Character Generation - Request Parsing');
     return new Response('으....이....', { status: 500 });
   }
-}
 
+  // SSE 스트리밍 응답 생성
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        // 시스템 프롬프트 생성
+        const body = buildGeminiRequestBody(
+          characterPrompt, commonRulesPrompt, history, user.nickname, user.self_introduction,
+          currentTime, latestImages, autoCallCount || 0, maxAutoCallSequence,
+          participants, situationPrompt, characterId, participant.character_type,
+          env, autoragContext, thinkingLevel || 'MEDIUM',
+          isContinuous
+        );
+
+        let fullText = '';
+        let usedFallback = false;
+
+        try {
+          // 1차 시도: SDK 스트리밍
+          const streamResult = await callGeminiStream('gemini-3-flash-preview', apiKey, body, env, 'Character Generation Stream');
+
+          try {
+            for await (const chunk of streamResult.stream) {
+              try {
+
+
+                const text = chunk.text();
+                if (text) {
+                  fullText += text;
+                  // SSE 포맷으로 전송
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text, type: 'chunk' })}\n\n`));
+                }
+              } catch (chunkError) {
+                console.error('청크 처리 중 오류:', chunkError.message);
+                // 특정 청크 오류 시에도 수집된 텍스트가 있으면 계속 진행하거나 안전하게 종료 시도
+              }
+            }
+          } catch (innerStreamError) {
+            console.error('스트림 반복 중 오류:', innerStreamError.message);
+            // 이미 데이터를 보냈다면 여기서 중단하고 수집된 데이터라도 처리하도록 함
+          }
+        } catch (streamError) {
+          console.error('스트리밍 실패, 프록시로 폴백:', streamError.message);
+
+          // 2차 시도: 프록시 폴백 (논스트리밍)
+          try {
+            const fallbackResult = await callGeminiViaProxy('gemini-3-flash-preview', apiKey, body, env, 'Character Generation Fallback');
+            if (fallbackResult.candidates && fallbackResult.candidates[0]?.content?.parts) {
+              const parts = fallbackResult.candidates[0].content.parts;
+
+              for (const part of parts) {
+                if (part.text) {
+                  fullText += part.text;
+                }
+              }
+
+              usedFallback = true;
+              // 프록시 결과는 한번에 전송
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: fullText, type: 'fallback' })}\n\n`));
+            } else {
+              throw new Error('프록시 응답이 비어있습니다.');
+            }
+          } catch (proxyError) {
+            await logError(proxyError, env, 'Character Generation - Proxy Fallback');
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: '응답 생성에 실패했습니다.', type: 'error' })}\n\n`));
+            controller.close();
+            return;
+          }
+        }
+
+        // 응답 파싱 및 캐릭터 호출
+        const { cleanContent: finalContent, calledCharacter } = parseCharacterCall(fullText);
+
+        // ★★★ 스트리밍 완료 후 DB 저장 ★★★
+        const newMessage = await saveChatMessage(conversationId, 'assistant', finalContent, env, characterId, autoCallCount || 0, null, participant.character_type);
+
+        // 완료 이벤트 전송
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+          type: 'done',
+          messageId: newMessage.id,
+          content: finalContent,
+          calledCharacter,
+          usedFallback
+        })}\n\n`));
+
+      } catch (error) {
+        await logError(error, env, 'Character Generation Stream');
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: '응답 생성 중 오류가 발생했습니다.', type: 'error' })}\n\n`));
+      } finally {
+        controller.close();
+      }
+    }
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive'
+    }
+  });
+}
 export async function handleAutoReply(request, env) {
   try {
-    const user = await getUserFromToken(request, env);
+    const user = await getUserFromRequest(request, env);
     if (!user) {
       return new Response('Unauthorized', { status: 401 });
     }
@@ -431,6 +270,15 @@ export async function handleAutoReply(request, env) {
     const { conversationId } = await request.json();
     if (!conversationId) {
       return new Response('Missing conversationId', { status: 400 });
+    }
+
+    // 대화방 소유권 확인
+    const conversation = await env.DB.prepare(
+      'SELECT id FROM conversations WHERE id = ? AND user_id = ?'
+    ).bind(conversationId, user.id).first();
+
+    if (!conversation) {
+      return new Response('대화방을 찾을 수 없거나 접근 권한이 없습니다.', { status: 404 });
     }
 
     const maxSequence = user.max_auto_call_sequence || 1;
@@ -449,8 +297,9 @@ export async function handleAutoReply(request, env) {
       let nextSpeakerName = null;
       let selectedCharacter = null;
 
-      // [Optimization] If there is only one character, select them immediately without asking Gemini
+      // [Optimization] If there is only one character, select them only for the first response
       if (participants.length === 1) {
+        if (i > 0) break;
         selectedCharacter = participants[0];
       } else {
         // Ask model to select next speaker (only for multi-character chats)
@@ -499,7 +348,7 @@ export async function handleAutoReply(request, env) {
             workMode: false, // Assuming default, adjust as needed
             showTime: true, // Assuming default, adjust as needed
             situationPrompt: '', // Assuming default, adjust as needed
-            imageGenerationEnabled: true, // Assuming default, adjust as needed
+
           }),
         });
 
@@ -525,15 +374,17 @@ export async function handleAutoReply(request, env) {
   }
 }
 
-async function callGeminiAPI(characterPrompt, commonRulesPrompt, history, userNickname, userSelfIntro, apiKey, currentTime, imageDataArray, autoCallSequence, maxAutoCallSequence, participants, situationPrompt, currentCharacterId, currentCharacterType, imageGenerationEnabled, env, imageCooldownSeconds, conversationId, autoragContext, selectedModel = 'gemini-2.5-flash') {
-  const modelMapping = {
-    'gemini-1.5-pro-latest': 'gemini-2.5-pro',
-    'gemini-1.5-flash-latest': 'gemini-2.5-flash',
-    'gemini-pro': 'gemini-2.5-flash',
-    'gemini-1.0-pro': 'gemini-2.5-flash'
-  };
-  const finalModel = modelMapping[selectedModel] || selectedModel;
-
+/**
+ * Gemini API 요청 본문을 생성하는 헬퍼 함수
+ * 스트리밍과 논스트리밍 호출 모두에서 재사용됨
+ */
+function buildGeminiRequestBody(
+  characterPrompt, commonRulesPrompt, history, userNickname, userSelfIntro,
+  currentTime, imageDataArray, autoCallSequence, maxAutoCallSequence,
+  participants, situationPrompt, currentCharacterId, currentCharacterType,
+  env, autoragContext, thinkingLevel = 'MEDIUM',
+  isContinuous = false
+) {
   let systemPrompt = characterPrompt;
   if (commonRulesPrompt) {
     systemPrompt += '\n\n' + commonRulesPrompt;
@@ -549,7 +400,7 @@ async function callGeminiAPI(characterPrompt, commonRulesPrompt, history, userNi
     }
   }
 
-  if (participants && participants.length > 0) {
+  if (isContinuous && participants && participants.length > 0) {
     const participantsList = participants.map(p => p.nickname ? `${p.name}(${p.nickname})` : p.name);
     const participantsText = participantsList.map(name => `   • ${name}`).join('\n');
     systemPrompt += '\n\n' + CHARACTER_CALL_SYSTEM.replace('{participantsList}', participantsText);
@@ -574,30 +425,7 @@ async function callGeminiAPI(characterPrompt, commonRulesPrompt, history, userNi
     systemPrompt += `\n\n[스토리 기억]\n다음은 관련된 스토리 맥락입니다. 이 정보를 참고하여 답변에 활용해주세요:\n\n${autoragContext}`;
   }
 
-  if (conversationId) {
-    try {
-      const conversation = await env.DB.prepare(
-        'SELECT use_affection_sys FROM conversations WHERE id = ?'
-      ).bind(conversationId).first();
 
-      if (conversation && conversation.use_affection_sys) {
-        const participant = await env.DB.prepare(
-          'SELECT affection_level FROM conversation_participants WHERE conversation_id = ? AND character_id = ? AND character_type = ?'
-        ).bind(conversationId, currentCharacterId, currentCharacterType).first();
-
-        if (participant && participant.affection_level !== null) {
-          // The affection prompt generation is removed.
-        }
-      }
-    } catch (affectionError) {
-      await logError(affectionError, env, 'Affection System in Gemini API');
-    }
-  }
-
-  if (imageGenerationEnabled && await supportsImageGeneration(currentCharacterId, currentCharacterType, env)) {
-    let imagePrompt = `\n이미지 생성 기능 사용법: 그림을 그려달라는 요청을 받으면, 메시지에 <<여기에 그림에 대한 영어 프롬프트>>형식으로 이미지 생성 명령을 포함하세요.`;
-    systemPrompt += `\n\n${imagePrompt}`;
-  }
 
   if (autoCallSequence > 0) {
     systemPrompt += `\n\n[자동 호출 정보]\n현재 연속 호출 순서: ${autoCallSequence}/${maxAutoCallSequence}`;
@@ -636,22 +464,18 @@ async function callGeminiAPI(characterPrompt, commonRulesPrompt, history, userNi
   const body = {
     contents: messages,
     generationConfig: {
-      temperature: 0.8, topK: 40, topP: 0.95, maxOutputTokens: 2048
+      temperature: 0.8, topK: 40, topP: 0.95, maxOutputTokens: 2048,
+      thinkingConfig: {
+        thinkingLevel: thinkingLevel
+      }
     }
   };
 
-  try {
-    const data = await callGemini(finalModel, apiKey, body, env, 'Character Generation');
-    if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-      return data.candidates[0].content.parts[0].text;
-    } else {
-      throw new Error('Gemini API 응답이 비어있습니다.');
-    }
-  } catch (error) {
-    console.error('Gemini API 호출 실패:', error);
-    throw error;
-  }
+
+
+  return body;
 }
+
 
 // 🔧 AutoRAG 메모리 컨텍스트 조회
 async function getAutoragMemoryContext(conversationId, user, env) {
@@ -1039,34 +863,33 @@ async function getLatestImagesFromHistory(conversationId, env, limit = 2) {
   }
 }
 
-async function updateConversationTitle(conversationId, message, env) {
-  try {
-    const conversation = await env.DB.prepare(
-      'SELECT title FROM conversations WHERE id = ?'
-    ).bind(conversationId).first();
-
-    if (!conversation || !conversation.title || conversation.title.startsWith('대화 ')) {
-      const title = message.length > 20 ? message.substring(0, 17) + '...' : message;
-
-      await env.DB.prepare(
-        'UPDATE conversations SET title = ? WHERE id = ?'
-      ).bind(title, conversationId).run();
-    }
-  } catch (error) {
-    await logError(error, env, 'Update Conversation Title');
-  }
-}
 
 export async function handleSelectSpeaker(request, env) {
   try {
-    const user = await getUserFromToken(request, env);
+    const user = await getUserFromRequest(request, env);
     if (!user) {
       return new Response('Unauthorized', { status: 401 });
     }
 
-    const { conversationId } = await request.json();
+    const { conversationId, autoCallCount, maxSequence, isContinuous } = await request.json();
     if (!conversationId) {
       return new Response('Missing conversationId', { status: 400 });
+    }
+
+    // 대화방 소유권 확인
+    const conversation = await env.DB.prepare(
+      'SELECT id FROM conversations WHERE id = ? AND user_id = ?'
+    ).bind(conversationId, user.id).first();
+
+    if (!conversation) {
+      return new Response('대화방을 찾을 수 없거나 접근 권한이 없습니다.', { status: 404 });
+    }
+
+    // Check if continuous call limit has been reached
+    const currentAutoCallCount = autoCallCount || 0;
+    const maxAutoCallSequence = maxSequence || (user.max_auto_call_sequence || 1);
+    if (currentAutoCallCount >= maxAutoCallSequence) {
+      return new Response(JSON.stringify({ speaker: null, reason: 'limit_reached' }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     const participants = await getConversationParticipants(conversationId, env);
@@ -1074,33 +897,63 @@ export async function handleSelectSpeaker(request, env) {
       return new Response(JSON.stringify({ speaker: null, reason: 'no_participants' }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    const recentMessages = await getRecentMessages(conversationId, 10, env);
-    const historyText = recentMessages.map(m => `${m.character_name || m.role}: ${m.content}`).join('\n');
+    // 대화 참여자가 1명인 경우: 연속 응답 옵션에 상관없이 1회만 답변하도록 함
+    if (participants.length === 1) {
+      if ((autoCallCount || 0) > 0) {
+        return new Response(JSON.stringify({ speaker: null, reason: 'single_participant_limit' }), { headers: { 'Content-Type': 'application/json' } });
+      }
+      const characterDetails = await getCharacterDetails(participants[0].id, participants[0].type, env);
+      return new Response(JSON.stringify({ speaker: characterDetails }), { headers: { 'Content-Type': 'application/json' } });
+    }
 
-    const lastMessage = recentMessages.length > 0 ? recentMessages[recentMessages.length - 1] : null;
-    const lastSpeakerName = lastMessage ? (lastMessage.character_name || 'user') : 'N/A';
+    // Fetch only the last message for analysis
+    const recentMessages = await getRecentMessages(conversationId, 1, env);
+    const lastMessage = recentMessages.length > 0 ? recentMessages[0] : null;
+
+    if (!lastMessage || !lastMessage.content) {
+      return new Response(JSON.stringify({ speaker: null, reason: 'no_message' }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
+    const lastSpeakerName = lastMessage.character_name || (lastMessage.role === 'user' ? (user.nickname || '사용자') : '알 수 없음');
+    const lastMessageContent = lastMessage.content;
 
     const participantNames = participants.map(p => p.nickname ? `${p.name}(${p.nickname})` : p.name);
     const userNickname = user.nickname || '사용자';
 
-    const prompt = `최근 대화 내용입니다:\n${historyText}\n\n대화 참가자 목록: [${participantNames.join(', ')}, ${userNickname}]\n\n바로 직전 발언자는 "${lastSpeakerName}"입니다. 대화의 흐름상 꼭 필요한 경우가 아니라면, "${lastSpeakerName}"가 아닌 다른 참가자를 다음 발언자로 선정해주세요. 다음으로 답변할 대화 참가자를 목록에서 선정해 이름만 정확히 말해주세요.`;
+    // 1차 자동 답변(유저 메시지 직후)이거나 연속 응답 모드인 경우 더 적극적으로 선택
+    const isFirstAutoReply = (autoCallCount || 0) === 0;
+
+    // Analyze only the last message to find the next speaker
+    const prompt = `대화 맥락을 분석하여 다음 발언자를 선택하세요.
+
+대화 참가자 목록: [${participantNames.join(', ')}, ${userNickname}]
+최근 메시지: "${lastMessageContent}"
+최근 발언자: "${lastSpeakerName}"
+
+지침:
+1. 최근 메시지에서 특정 참가자를 명시적으로 불렀거나 대화를 넘겼다면, 해당 참가자의 이름만 정확히 출력하세요.
+2. 유저(${userNickname})에게 대화를 넘겼거나 유저의 차례라면 "유저"라고 출력하세요.
+3. ${isFirstAutoReply ? '누구도 명시적으로 호출되지 않았다면, 대화 흐름상 가장 적절한 다음 캐릭터를 선택하여 이름만 출력하세요.' : '누구도 명시적으로 호출되지 않았거나 호출이 불분명하면 "없음"이라고 출력하세요.'}
+
+다음 발화자 이름:`;
 
     const apiKey = user.gemini_api_key || env.GEMINI_API_KEY;
     const body = {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 1.0, maxOutputTokens: 50 }
+      generationConfig: { temperature: 0.5, maxOutputTokens: 50 }
     };
 
     let nextSpeakerName = null;
     try {
-      const nextSpeakerData = await callGemini('gemini-2.5-flash-lite', apiKey, body, env, 'Select Speaker');
+      const nextSpeakerData = await callGemini('gemini-3-flash-preview', apiKey, body, env, 'Select Speaker');
       nextSpeakerName = nextSpeakerData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
     } catch (error) {
       await logError(error, env, 'handleSelectSpeaker');
       return new Response(JSON.stringify({ speaker: null, reason: 'selection_failed' }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (!nextSpeakerName || nextSpeakerName.includes('유저') || nextSpeakerName.includes(userNickname)) {
+    // Check for "없음" or user selection
+    if (!nextSpeakerName || nextSpeakerName === '없음' || nextSpeakerName.includes('유저') || nextSpeakerName.includes(userNickname)) {
       return new Response(JSON.stringify({ speaker: null, reason: 'user_selected' }), { headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -1172,4 +1025,5 @@ async function getRecentMessages(conversationId, limit, env) {
     await logError(error, env, 'Get Recent Messages');
     return [];
   }
+
 }

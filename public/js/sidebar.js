@@ -8,7 +8,7 @@ async function initializeSidebar() {
         await loadNotice();
         await loadConversations();
         setupSidebarEventListeners();
-        
+
         // 사용자 정보 UI 업데이트
         if (window.userInfo) {
             updateUserInfoUI();
@@ -27,20 +27,20 @@ function setupSidebarEventListeners() {
             document.getElementById('sidebar').classList.remove('collapsed');
         });
     }
-    
+
     const closeBtn = document.getElementById('sidebarCloseBtn');
     if (closeBtn) {
         closeBtn.addEventListener('click', () => {
             document.getElementById('sidebar').classList.add('collapsed');
         });
     }
-    
+
     const searchInput = document.getElementById('conversationSearch');
     if (searchInput) searchInput.addEventListener('input', handleSearchInput);
-    
+
     const clearBtn = document.getElementById('clearSearchBtn');
     if (clearBtn) clearBtn.addEventListener('click', clearSearch);
-    
+
     const newConvBtn = document.getElementById('newConversationBtn');
     if (newConvBtn) {
         newConvBtn.addEventListener('click', () => {
@@ -75,20 +75,16 @@ function clearSearch() {
 // 공지사항 로드
 async function loadNotice() {
     try {
-        const response = await fetch('/api/notice');
+        const response = await fetch('/api/notice?type=main');
         if (response.ok) {
             const data = await response.json();
             const noticeEl = document.getElementById('noticeContent');
             if (noticeEl) {
-                // Handle both single notice and array of notices
                 if (Array.isArray(data) && data.length > 0) {
-                    // Array format (like main.html)
                     const noticeHtml = data.map(notice => notice.content).join('<br><br>');
                     noticeEl.innerHTML = noticeHtml;
                 } else if (data.content) {
-                    // Single notice format
-                    const formattedNotice = data.content.replace(/\n/g, '<br>');
-                    noticeEl.innerHTML = formattedNotice;
+                    noticeEl.innerHTML = data.content;
                 } else {
                     noticeEl.textContent = '공지사항이 없습니다.';
                 }
@@ -102,8 +98,7 @@ async function loadNotice() {
         const noticeEl = document.getElementById('noticeContent');
         if (noticeEl) noticeEl.textContent = '공지사항을 불러오는데 실패했습니다.';
     }
-    
-    // 성공/실패 관계없이 로딩 완료 신호 (전역 로딩 상태 업데이트)
+
     if (window.markNoticeLoaded) {
         window.markNoticeLoaded();
     }
@@ -123,7 +118,7 @@ async function loadConversations() {
     } catch (error) {
         console.error('대화내역 로드 실패:', error);
     }
-    
+
     // 성공/실패 관계없이 로딩 완료 신호 (전역 로딩 상태 업데이트)
     if (window.markConversationsLoaded) {
         window.markConversationsLoaded();
@@ -142,22 +137,22 @@ function displayConversations() {
     const listElement = document.getElementById('conversationList');
     if (!listElement) return;
     listElement.innerHTML = '';
-    
+
     // 검색 필터링
     let filteredConversations = allConversations;
     if (searchQuery) {
-        filteredConversations = allConversations.filter(conv => 
+        filteredConversations = allConversations.filter(conv =>
             conv.title && conv.title.toLowerCase().includes(searchQuery)
         );
     }
-    
+
     // 즐겨찾기 우선 정렬
     filteredConversations.sort((a, b) => {
         if (a.is_favorite && !b.is_favorite) return -1;
         if (!a.is_favorite && b.is_favorite) return 1;
         return new Date(b.created_at) - new Date(a.created_at);
     });
-    
+
     // 검색 결과가 없는 경우
     if (filteredConversations.length === 0) {
         if (searchQuery) {
@@ -165,7 +160,7 @@ function displayConversations() {
         }
         return;
     }
-    
+
     filteredConversations.forEach(conv => {
         const item = document.createElement('div');
         item.className = 'conversation-item';
@@ -175,15 +170,15 @@ function displayConversations() {
         if (conv.is_favorite) {
             item.classList.add('favorite');
         }
-        
+
         // 참여 캐릭터 이미지 표시
         let participantImagesHtml = '';
         if (conv.participant_images) {
             const images = conv.participant_images;
             const maxAvatars = 10;
             const displayedAvatars = images.slice(0, maxAvatars);
-            
-            participantImagesHtml = displayedAvatars.map(img => 
+
+            participantImagesHtml = displayedAvatars.map(img =>
                 `<img src="${img}" class="participant-avatar" style="transform: rotate(${Math.random() * 20 - 10}deg);">`
             ).join('');
 
@@ -191,11 +186,11 @@ function displayConversations() {
                 participantImagesHtml += `<span class="participant-avatar-more">...</span>`;
             }
         }
-        
+
         // 대화 제목에서 유니코드 이모지 제거 및 HTML 이스케이프
         const cleanTitle = removeUnicodeEmojis(conv.title || '');
         const escapedTitle = escapeHTML(cleanTitle);
-        
+
         item.innerHTML = `
             <div class="conversation-info" onclick="loadConversationAndCloseSidebar(${conv.id})" style="cursor: pointer; flex: 1;">
                 <div class="conversation-title" data-conversation-id="${conv.id}" ondblclick="startEditTitle(${conv.id}, event)">${escapedTitle}</div>
@@ -215,34 +210,34 @@ function displayConversations() {
 // 즐겨찾기 토글
 async function toggleFavorite(conversationId, event) {
     event.stopPropagation();
-    
+
     try {
         const response = await fetch(`/api/conversations/${conversationId}/favorite`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
-        
+
         if (response.ok) {
             await loadConversations();
         } else {
-            alert('즐겨찾기 설정에 실패했습니다.');
+            Swal.fire({ icon: 'error', text: '즐겨찾기 설정에 실패했습니다.' });
         }
     } catch (error) {
-        alert('즐겨찾기 설정에 실패했습니다.');
+        Swal.fire({ icon: 'error', text: '즐겨찾기 설정에 실패했습니다.' });
     }
 }
 
 // 제목 수정 시작
 function startEditTitle(conversationId, event) {
     event.stopPropagation();
-    
+
     const titleElement = document.querySelector(`.conversation-title[data-conversation-id="${conversationId}"]`);
     const inputElement = document.querySelector(`.title-edit-input[data-conversation-id="${conversationId}"]`);
-    
+
     if (titleElement && inputElement) {
         const currentTitle = titleElement.textContent;
         inputElement.value = currentTitle;
-        
+
         titleElement.classList.add('editing');
         inputElement.classList.add('active');
         inputElement.focus();
@@ -254,10 +249,10 @@ function startEditTitle(conversationId, event) {
 async function saveTitle(conversationId) {
     const titleElement = document.querySelector(`.conversation-title[data-conversation-id="${conversationId}"]`);
     const inputElement = document.querySelector(`.title-edit-input[data-conversation-id="${conversationId}"]`);
-    
+
     if (titleElement && inputElement) {
         const newTitle = inputElement.value.trim();
-        
+
         if (newTitle && newTitle !== titleElement.textContent) {
             try {
                 const response = await fetch(`/api/conversations/${conversationId}/title`, {
@@ -265,7 +260,7 @@ async function saveTitle(conversationId) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ title: newTitle })
                 });
-                
+
                 if (response.ok) {
                     titleElement.textContent = newTitle;
                     if (conversationId === window.currentConversationId) {
@@ -274,13 +269,13 @@ async function saveTitle(conversationId) {
                     }
                     await loadConversations();
                 } else {
-                    alert('제목 변경에 실패했습니다.');
+                    Swal.fire({ icon: 'error', text: '제목 변경에 실패했습니다.' });
                 }
             } catch (error) {
-                alert('제목 변경에 실패했습니다.');
+                Swal.fire({ icon: 'error', text: '제목 변경에 실패했습니다.' });
             }
         }
-        
+
         titleElement.classList.remove('editing');
         inputElement.classList.remove('active');
     }
@@ -293,7 +288,7 @@ function handleTitleKeypress(event, conversationId) {
     } else if (event.key === 'Escape') {
         const titleElement = document.querySelector(`.conversation-title[data-conversation-id="${conversationId}"]`);
         const inputElement = document.querySelector(`.title-edit-input[data-conversation-id="${conversationId}"]`);
-        
+
         if (titleElement && inputElement) {
             titleElement.classList.remove('editing');
             inputElement.classList.remove('active');
@@ -327,7 +322,7 @@ function updateApiKeyUI() {
     if (!input) return; // chat.html에서 제거됨
     const submitBtn = document.getElementById('apiKeySubmitBtn');
     const deleteBtn = document.getElementById('deleteApiKeyBtn');
-    
+
     if (window.userInfo.has_api_key) {
         input.value = '●●●●●●●●●●●●●●●●';
         if (submitBtn) submitBtn.textContent = '변경하기';
@@ -344,7 +339,7 @@ async function updateAutoCallSetting() {
     const maxAutoCallInput = document.getElementById('maxAutoCall');
     if (!maxAutoCallInput) return;
     const maxSequence = maxAutoCallInput.value;
-    
+
     try {
         const response = await fetch('/api/user/update', {
             method: 'POST',
@@ -354,42 +349,53 @@ async function updateAutoCallSetting() {
                 max_auto_call_sequence: maxSequence
             })
         });
-        
+
         if (response.ok) {
-            alert('설정이 저장되었습니다.');
+            Swal.fire({ icon: 'success', text: '설정이 저장되었습니다.' });
             if (window.loadUserInfo) {
                 await window.loadUserInfo();
             }
         } else if (response.status === 401) {
             window.location.href = '/login';
         } else {
-            alert('으....이....');
+            Swal.fire({ icon: 'error', text: '으....이....' });
         }
     } catch (error) {
-        alert('으....이....');
+        Swal.fire({ icon: 'error', text: '으....이....' });
     }
 }
 
 // 대화 삭제
 async function deleteConversation(id) {
-    if (!confirm('대화내역을 삭제하시겠습니까?')) return;
-    
+    const result = await Swal.fire({
+        title: '대화 삭제',
+        text: '대화내역을 삭제하시겠습니까?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '삭제',
+        cancelButtonText: '취소'
+    });
+
+    if (!result.isConfirmed) return;
+
     try {
         const response = await fetch(`/api/conversations/${id}`, {
             method: 'DELETE'
         });
-        
+
         if (response.ok) {
             await loadConversations();
             if (window.currentConversationId === id) {
                 window.currentConversationId = null;
                 window.currentCharacters = [];
-                
+
                 const chatMessagesEl = document.getElementById('chatMessages');
                 if (chatMessagesEl) chatMessagesEl.innerHTML = '';
                 const convTitleEl = document.getElementById('conversationTitle');
                 if (convTitleEl) convTitleEl.textContent = '세카이 채팅';
-                
+
                 if (window.updateInvitedCharactersUI) {
                     window.updateInvitedCharactersUI();
                 }
@@ -401,7 +407,7 @@ async function deleteConversation(id) {
             window.location.href = '/login';
         }
     } catch (error) {
-        alert('으....이....');
+        Swal.fire({ icon: 'error', text: '으....이....' });
     }
 }
 
@@ -411,7 +417,7 @@ async function logout() {
         await fetch('/api/auth/logout', { method: 'POST' });
         window.location.href = '/';
     } catch (error) {
-        alert('으....이....');
+        Swal.fire({ icon: 'error', text: '으....이....' });
     }
 }
 

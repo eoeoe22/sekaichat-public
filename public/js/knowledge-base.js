@@ -9,10 +9,10 @@ async function initializeKnowledgeBase() {
     try {
         // 이벤트 리스너 설정
         setupKnowledgeEventListeners();
-        
+
         // 지식 목록 로드
         await loadAllKnowledge();
-        
+
         console.log('지식 베이스 초기화 완료');
     } catch (error) {
         console.error('지식 베이스 초기화 오류:', error);
@@ -23,9 +23,9 @@ async function initializeKnowledgeBase() {
 function setupKnowledgeEventListeners() {
     // 지식 버튼 클릭
     document.getElementById('knowledgeBtn')?.addEventListener('click', openKnowledgeModal);
-    
+
     // 지식 토글 버튼 이벤트 위임
-    document.addEventListener('click', function(e) {
+    document.addEventListener('click', function (e) {
         if (e.target.closest('.knowledge-toggle')) {
             const button = e.target.closest('.knowledge-toggle');
             const knowledgeId = button.dataset.knowledgeId;
@@ -34,7 +34,7 @@ function setupKnowledgeEventListeners() {
             }
         }
     });
-    
+
     // 모달 이벤트
     const knowledgeModal = document.getElementById('knowledgeModal');
     if (knowledgeModal) {
@@ -51,7 +51,7 @@ async function loadAllKnowledge() {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' }
         });
-        
+
         if (response.ok) {
             allKnowledge = await response.json();
             renderKnowledgeList();
@@ -68,13 +68,13 @@ async function loadAllKnowledge() {
 // 적용된 지식 로드
 async function loadAppliedKnowledge() {
     if (!currentConversationId) return;
-    
+
     try {
         const response = await fetch(`/api/conversations/${currentConversationId}/knowledge`, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' }
         });
-        
+
         if (response.ok) {
             appliedKnowledge = await response.json();
             renderAppliedKnowledgeList();
@@ -90,18 +90,18 @@ async function loadAppliedKnowledge() {
 function renderKnowledgeList() {
     const container = document.getElementById('knowledgeList');
     if (!container) return;
-    
+
     if (allKnowledge.length === 0) {
         container.innerHTML = '<div class="text-muted text-center py-3">등록된 지식이 없습니다.</div>';
         return;
     }
-    
+
     const appliedIds = appliedKnowledge.map(k => k.id);
-    
+
     container.innerHTML = allKnowledge.map(knowledge => {
         const isApplied = appliedIds.includes(knowledge.id);
         const keywords = knowledge.keywords.split(',').map(k => k.trim());
-        
+
         return `
             <div class="knowledge-item" data-id="${knowledge.id}">
                 <div class="knowledge-item-header">
@@ -119,14 +119,14 @@ function renderKnowledgeList() {
                     ${keywords.map(keyword => `<span class="keyword">${escapeHtml(keyword)}</span>`).join('')}
                 </div>
                 <div class="mt-2">
-                    ${isApplied ? 
-                        `<button class="btn-remove-knowledge" onclick="removeKnowledgeFromConversation(${knowledge.id})">
+                    ${isApplied ?
+                `<button class="btn-remove-knowledge" onclick="removeKnowledgeFromConversation(${knowledge.id})">
                             <i class="bi bi-x"></i> 제거
                         </button>` :
-                        `<button class="btn-apply-knowledge" onclick="applyKnowledgeToConversation(${knowledge.id})">
+                `<button class="btn-apply-knowledge" onclick="applyKnowledgeToConversation(${knowledge.id})">
                             <i class="bi bi-plus"></i> 적용
                         </button>`
-                    }
+            }
                 </div>
             </div>
         `;
@@ -137,12 +137,12 @@ function renderKnowledgeList() {
 function renderAppliedKnowledgeList() {
     const container = document.getElementById('appliedKnowledgeList');
     if (!container) return;
-    
+
     if (appliedKnowledge.length === 0) {
         container.innerHTML = '<div class="text-muted text-center py-3">적용된 지식이 없습니다.</div>';
         return;
     }
-    
+
     container.innerHTML = appliedKnowledge.map(knowledge => `
         <div class="applied-knowledge-item" data-id="${knowledge.id}">
             <div class="knowledge-item-header">
@@ -167,7 +167,7 @@ function renderAppliedKnowledgeList() {
 function toggleKnowledgeContent(knowledgeId) {
     const content = document.getElementById(`knowledge-content-${knowledgeId}`);
     const toggle = document.querySelector(`[data-knowledge-id="${knowledgeId}"] i`);
-    
+
     if (content && toggle) {
         content.classList.toggle('show');
         toggle.classList.toggle('bi-chevron-down');
@@ -188,17 +188,17 @@ async function openKnowledgeModal() {
 // 대화에 지식 적용
 async function applyKnowledgeToConversation(knowledgeId) {
     if (!currentConversationId) {
-        alert('대화를 선택해주세요.');
+        Swal.fire({ icon: 'warning', text: '대화를 선택해주세요.' });
         return;
     }
-    
+
     try {
         const response = await fetch(`/api/conversations/${currentConversationId}/knowledge`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ knowledgeId })
         });
-        
+
         if (response.ok) {
             await loadAppliedKnowledge();
             renderKnowledgeList();
@@ -207,25 +207,24 @@ async function applyKnowledgeToConversation(knowledgeId) {
             window.location.href = '/login';
         } else {
             const errorText = await response.text();
-            alert(errorText || '적용 중 오류가 발생했습니다.');
+            Swal.fire({ icon: 'error', text: errorText || '적용 중 오류가 발생했습니다.' });
         }
     } catch (error) {
-        console.error('지식 적용 오류:', error);
-        alert('적용 중 오류가 발생했습니다.');
+        Swal.fire({ icon: 'error', text: '적용 중 오류가 발생했습니다.' });
     }
 }
 
 // 대화에서 지식 제거
 async function removeKnowledgeFromConversation(knowledgeId) {
     if (!currentConversationId) return;
-    
+
     try {
         const response = await fetch(`/api/conversations/${currentConversationId}/knowledge`, {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ knowledgeId })
         });
-        
+
         if (response.ok) {
             await loadAppliedKnowledge();
             renderKnowledgeList();
@@ -233,20 +232,19 @@ async function removeKnowledgeFromConversation(knowledgeId) {
         } else if (response.status === 401) {
             window.location.href = '/login';
         } else {
-            alert('제거 중 오류가 발생했습니다.');
+            Swal.fire({ icon: 'error', text: '제거 중 오류가 발생했습니다.' });
         }
     } catch (error) {
-        console.error('지식 제거 오류:', error);
-        alert('제거 중 오류가 발생했습니다.');
+        Swal.fire({ icon: 'error', text: '제거 중 오류가 발생했습니다.' });
     }
 }
 
 // 지식 제안 UI 표시
 function showKnowledgeSuggestion(suggestedKnowledge) {
     if (!suggestedKnowledge || suggestedKnowledge.length === 0) return;
-    
+
     currentSuggestedKnowledge = suggestedKnowledge;
-    
+
     suggestedKnowledge.forEach(knowledge => {
         const suggestionHtml = `
             <div class="knowledge-suggestion" data-suggestion-id="${knowledge.id}">
@@ -267,7 +265,7 @@ function showKnowledgeSuggestion(suggestedKnowledge) {
                 </div>
             </div>
         `;
-        
+
         const messagesContainer = document.getElementById('chatMessages');
         if (messagesContainer) {
             messagesContainer.insertAdjacentHTML('beforeend', suggestionHtml);

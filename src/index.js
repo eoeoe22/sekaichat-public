@@ -41,19 +41,16 @@ import {
 } from './handlers/conversation-handlers.js';
 import { getSekaiPreferences, updateSekaiPreferences } from './handlers/sekai.js';
 import {
-  handleImageGeneration,
   handleDirectUpload,
   serveImage
 } from './handlers/images.js';
 import {
   handleAutoragPreview,
   handleAutoragStatus,
-  handleVocaloidSearch,
   handleAutoragFullContent
 } from './handlers/autorag.js';
 import { handleR2Request } from './handlers/r2.js';
 import { getNotice } from './handlers/notices.js';
-import { handleScheduled } from './scheduled-crawler.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -66,7 +63,7 @@ export default {
         return Response.redirect(newUrl.toString(), 301);
       }
 
-      const path = url.pathname;
+      const path = url.pathname.endsWith('/') && url.pathname.length > 1 ? url.pathname.slice(0, -1) : url.pathname;
 
       if (path.startsWith('/api/')) {
         return handleAPI(request, env, path, ctx);
@@ -92,9 +89,7 @@ export default {
     }
   },
 
-  async scheduled(event, env, ctx) {
-    return handleScheduled(event, env, ctx);
-  }
+
 };
 
 async function handleAPI(request, env, path, ctx) {
@@ -109,7 +104,7 @@ async function handleAPI(request, env, path, ctx) {
     '/api/chat/generate': { POST: handleCharacterGeneration },
     '/api/chat/auto-reply': { POST: handleAutoReply },
     '/api/chat/auto-reply/select-speaker': { POST: handleSelectSpeaker },
-    '/api/image-generation': { POST: handleImageGeneration },
+
     '/api/characters': { GET: handleCharacters.getAll },
     '/api/characters/info': { GET: handleCharacters.getInfo },
     '/api/characters/extended': { GET: getExtendedCharacterList },
@@ -133,21 +128,6 @@ async function handleAPI(request, env, path, ctx) {
     '/api/autorag/preview': { POST: handleAutoragPreview },
     '/api/autorag/status': { GET: handleAutoragStatus },
     '/api/autorag/full-content': { POST: handleAutoragFullContent },
-    '/api/vocaloid/search': { POST: handleVocaloidSearch },
-    '/api/cron/trigger': {
-      POST: async (request, env, ctx) => {
-        // Run the scheduled task manually
-        const event = {
-          scheduledTime: Date.now(),
-          cron: "MANUAL_TRIGGER",
-          type: "scheduled"
-        };
-        ctx.waitUntil(handleScheduled(event, env, ctx));
-        return new Response(JSON.stringify({ status: 'triggered', message: 'Crawler started in background' }), {
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-    },
   };
 
   if (routes[path] && routes[path][method]) {
@@ -225,3 +205,4 @@ async function handleAPI(request, env, path, ctx) {
 
   return new Response('Not Found', { status: 405 });
 }
+

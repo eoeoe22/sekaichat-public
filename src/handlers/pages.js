@@ -29,7 +29,6 @@ export async function handlePages(request, env) {
     '/settings': '/settings.html',
     '/characterinfo': '/characterinfo.html',
     '/autorag': '/autorag.html',
-    '/autorag-vocaloid': '/autorag-vocaloid.html',
   };
 
   const cleanPath = path.endsWith('/') && path.length > 1 ? path.slice(0, -1) : path;

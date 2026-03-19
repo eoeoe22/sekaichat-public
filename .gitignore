@@ -1,0 +1,7 @@
+public/images/
+
+# Wrangler build and temp files
+.wrangler/
+dist/
+node_modules/
+*.log

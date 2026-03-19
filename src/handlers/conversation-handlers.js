@@ -1,11 +1,23 @@
-import { logError, getUserFromRequest } from '../utils.js';
+import { logError, getUserFromRequest, jsonResponse, errorResponse } from '../utils.js';
+
+// 인증 + 대화방 소유권 확인 헬퍼
+async function requireConversationOwner(request, env, conversationId, selectColumns = 'id') {
+    const user = await getUserFromRequest(request, env);
+    if (!user) return { error: errorResponse('Unauthorized', 401) };
+
+    const conversation = await env.DB.prepare(
+        `SELECT ${selectColumns} FROM conversations WHERE id = ? AND user_id = ?`
+    ).bind(conversationId, user.id).first();
+
+    if (!conversation) return { error: errorResponse('Not Found', 404) };
+
+    return { user, conversation };
+}
 
 export async function handleConversations(request, env) {
     try {
         const user = await getUserFromRequest(request, env);
-        if (!user) {
-            return new Response('Unauthorized', { status: 401 });
-        }
+        if (!user) return errorResponse('Unauthorized', 401);
 
         const { results } = await env.DB.prepare(`
       SELECT c.id, c.title, c.created_at, c.is_favorite,
@@ -24,27 +36,22 @@ export async function handleConversations(request, env) {
       ORDER BY c.is_favorite DESC, c.created_at DESC
     `).bind(user.id).all();
 
-        // 참여자 이미지 처리
         const conversations = results.map(conv => ({
             ...conv,
             participant_images: conv.participant_images ? conv.participant_images.split(',') : []
         }));
 
-        return new Response(JSON.stringify(conversations || []), {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return jsonResponse(conversations || []);
     } catch (error) {
         await logError(error, env, 'Handle Conversations');
-        return new Response('Internal Server Error', { status: 500 });
+        return errorResponse('Internal Server Error');
     }
 }
 
 export async function createConversation(request, env) {
     try {
         const user = await getUserFromRequest(request, env);
-        if (!user) {
-            return new Response('Unauthorized', { status: 401 });
-        }
+        if (!user) return errorResponse('Unauthorized', 401);
 
         const { title } = await request.json();
         const conversationTitle = title || `대화 ${Date.now()}`;
@@ -53,33 +60,20 @@ export async function createConversation(request, env) {
             'INSERT INTO conversations (user_id, title) VALUES (?, ?) RETURNING id'
         ).bind(user.id, conversationTitle).first();
 
-        return new Response(JSON.stringify({
-            id: result.id,
-            title: conversationTitle
-        }), {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return jsonResponse({ id: result.id, title: conversationTitle });
     } catch (error) {
         await logError(error, env, 'Create Conversation');
-        return new Response('Internal Server Error', { status: 500 });
+        return errorResponse('Internal Server Error');
     }
 }
 
 export async function getConversationMessages(request, env, conversationId) {
     try {
-        const user = await getUserFromRequest(request, env);
-        if (!user) {
-            return new Response('Unauthorized', { status: 401 });
-        }
-
-        // 대화방 접근 권한 확인 및 설정 정보 조회
-        const conversation = await env.DB.prepare(
-            'SELECT work_mode, show_time_info, situation_prompt, auto_reply_mode_enabled, use_autorag_memory FROM conversations WHERE id = ? AND user_id = ?'
-        ).bind(conversationId, user.id).first();
-
-        if (!conversation) {
-            return new Response('Not Found', { status: 404 });
-        }
+        const { error, conversation } = await requireConversationOwner(
+            request, env, conversationId,
+            'work_mode, show_time_info, situation_prompt, auto_reply_mode_enabled, use_autorag_memory'
+        );
+        if (error) return error;
 
         const { results } = await env.DB.prepare(
             `SELECT m.id, m.role, m.content, m.message_type, m.auto_call_sequence,
@@ -97,112 +91,66 @@ export async function getConversationMessages(request, env, conversationId) {
        ORDER BY m.created_at ASC`
         ).bind(conversationId).all();
 
-        return new Response(JSON.stringify({
+        return jsonResponse({
             messages: results || [],
             work_mode: conversation.work_mode,
             show_time_info: conversation.show_time_info !== undefined ? conversation.show_time_info : 1,
             situation_prompt: conversation.situation_prompt || '',
             auto_reply_mode_enabled: conversation.auto_reply_mode_enabled || 0,
             use_autorag_memory: conversation.use_autorag_memory || 0
-        }), {
-            headers: { 'Content-Type': 'application/json' }
         });
     } catch (error) {
         await logError(error, env, 'Get Conversation Messages');
-        return new Response('Internal Server Error', { status: 500 });
+        return errorResponse('Internal Server Error');
     }
 }
 
 export async function toggleConversationFavorite(request, env, conversationId) {
     try {
-        const user = await getUserFromRequest(request, env);
-        if (!user) {
-            return new Response('Unauthorized', { status: 401 });
-        }
+        const { error, conversation } = await requireConversationOwner(request, env, conversationId, 'is_favorite');
+        if (error) return error;
 
-        // 대화방 소유권 확인
-        const conversation = await env.DB.prepare(
-            'SELECT is_favorite FROM conversations WHERE id = ? AND user_id = ?'
-        ).bind(conversationId, user.id).first();
-
-        if (!conversation) {
-            return new Response('Not Found', { status: 404 });
-        }
-
-        // 즐겨찾기 상태 토글
         const newFavoriteStatus = conversation.is_favorite ? 0 : 1;
 
         await env.DB.prepare(
             'UPDATE conversations SET is_favorite = ? WHERE id = ?'
         ).bind(newFavoriteStatus, conversationId).run();
 
-        return new Response(JSON.stringify({
-            success: true,
-            is_favorite: newFavoriteStatus
-        }), {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return jsonResponse({ success: true, is_favorite: newFavoriteStatus });
     } catch (error) {
         await logError(error, env, 'Toggle Conversation Favorite');
-        return new Response('Internal Server Error', { status: 500 });
+        return errorResponse('Internal Server Error');
     }
 }
 
 export async function updateConversationTitle(request, env, conversationId) {
     try {
-        const user = await getUserFromRequest(request, env);
-        if (!user) {
-            return new Response('Unauthorized', { status: 401 });
-        }
-
-        // 대화방 소유권 확인
-        const conversation = await env.DB.prepare(
-            'SELECT id FROM conversations WHERE id = ? AND user_id = ?'
-        ).bind(conversationId, user.id).first();
-
-        if (!conversation) {
-            return new Response('Not Found', { status: 404 });
-        }
+        const { error } = await requireConversationOwner(request, env, conversationId);
+        if (error) return error;
 
         const { title } = await request.json();
 
         if (!title || title.trim().length === 0) {
-            return new Response('제목이 필요합니다.', { status: 400 });
+            return errorResponse('제목이 필요합니다.', 400);
         }
 
-        const trimmedTitle = title.trim().substring(0, 100); // 최대 100자
+        const trimmedTitle = title.trim().substring(0, 100);
 
         await env.DB.prepare(
             'UPDATE conversations SET title = ? WHERE id = ?'
         ).bind(trimmedTitle, conversationId).run();
 
-        return new Response(JSON.stringify({
-            success: true,
-            title: trimmedTitle
-        }), {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return jsonResponse({ success: true, title: trimmedTitle });
     } catch (error) {
         await logError(error, env, 'Update Conversation Title');
-        return new Response('Internal Server Error', { status: 500 });
+        return errorResponse('Internal Server Error');
     }
 }
 
 export async function updateWorkMode(request, env, conversationId) {
     try {
-        const user = await getUserFromRequest(request, env);
-        if (!user) {
-            return new Response('Unauthorized', { status: 401 });
-        }
-
-        // 대화방 소유권 확인
-        const conversation = await env.DB.prepare(
-            'SELECT id FROM conversations WHERE id = ? AND user_id = ?'
-        ).bind(conversationId, user.id).first();
-
-        if (!conversation) {
-            return new Response('Not Found', { status: 404 });
-        }
+        const { error } = await requireConversationOwner(request, env, conversationId);
+        if (error) return error;
 
         const { workMode } = await request.json();
 
@@ -210,32 +158,17 @@ export async function updateWorkMode(request, env, conversationId) {
             'UPDATE conversations SET work_mode = ? WHERE id = ?'
         ).bind(workMode ? 1 : 0, conversationId).run();
 
-        return new Response(JSON.stringify({
-            success: true,
-            work_mode: workMode ? 1 : 0
-        }), {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return jsonResponse({ success: true, work_mode: workMode ? 1 : 0 });
     } catch (error) {
         await logError(error, env, 'Update Work Mode');
-        return new Response('Internal Server Error', { status: 500 });
+        return errorResponse('Internal Server Error');
     }
 }
 
 export async function updateShowTime(request, env, conversationId) {
     try {
-        const user = await getUserFromRequest(request, env);
-        if (!user) {
-            return new Response('Unauthorized', { status: 401 });
-        }
-
-        const conversation = await env.DB.prepare(
-            'SELECT id FROM conversations WHERE id = ? AND user_id = ?'
-        ).bind(conversationId, user.id).first();
-
-        if (!conversation) {
-            return new Response('Not Found', { status: 404 });
-        }
+        const { error } = await requireConversationOwner(request, env, conversationId);
+        if (error) return error;
 
         const { showTime } = await request.json();
 
@@ -243,32 +176,17 @@ export async function updateShowTime(request, env, conversationId) {
             'UPDATE conversations SET show_time_info = ? WHERE id = ?'
         ).bind(showTime ? 1 : 0, conversationId).run();
 
-        return new Response(JSON.stringify({
-            success: true,
-            show_time_info: showTime ? 1 : 0
-        }), {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return jsonResponse({ success: true, show_time_info: showTime ? 1 : 0 });
     } catch (error) {
         await logError(error, env, 'Update Show Time');
-        return new Response('Internal Server Error', { status: 500 });
+        return errorResponse('Internal Server Error');
     }
 }
 
 export async function updateSituationPrompt(request, env, conversationId) {
     try {
-        const user = await getUserFromRequest(request, env);
-        if (!user) {
-            return new Response('Unauthorized', { status: 401 });
-        }
-
-        const conversation = await env.DB.prepare(
-            'SELECT id FROM conversations WHERE id = ? AND user_id = ?'
-        ).bind(conversationId, user.id).first();
-
-        if (!conversation) {
-            return new Response('Not Found', { status: 404 });
-        }
+        const { error } = await requireConversationOwner(request, env, conversationId);
+        if (error) return error;
 
         const { situationPrompt } = await request.json();
         const trimmedPrompt = situationPrompt ? situationPrompt.trim().substring(0, 10000) : '';
@@ -277,32 +195,17 @@ export async function updateSituationPrompt(request, env, conversationId) {
             'UPDATE conversations SET situation_prompt = ? WHERE id = ?'
         ).bind(trimmedPrompt, conversationId).run();
 
-        return new Response(JSON.stringify({
-            success: true,
-            situation_prompt: trimmedPrompt
-        }), {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return jsonResponse({ success: true, situation_prompt: trimmedPrompt });
     } catch (error) {
         await logError(error, env, 'Update Situation Prompt');
-        return new Response('Internal Server Error', { status: 500 });
+        return errorResponse('Internal Server Error');
     }
 }
 
 export async function updateAutoReplyMode(request, env, conversationId) {
     try {
-        const user = await getUserFromRequest(request, env);
-        if (!user) {
-            return new Response('Unauthorized', { status: 401 });
-        }
-
-        const conversation = await env.DB.prepare(
-            'SELECT id FROM conversations WHERE id = ? AND user_id = ?'
-        ).bind(conversationId, user.id).first();
-
-        if (!conversation) {
-            return new Response('Not Found', { status: 404 });
-        }
+        const { error } = await requireConversationOwner(request, env, conversationId);
+        if (error) return error;
 
         const { autoReplyMode } = await request.json();
 
@@ -310,24 +213,17 @@ export async function updateAutoReplyMode(request, env, conversationId) {
             'UPDATE conversations SET auto_reply_mode_enabled = ? WHERE id = ?'
         ).bind(autoReplyMode ? 1 : 0, conversationId).run();
 
-        return new Response(JSON.stringify({
-            success: true,
-            auto_reply_mode_enabled: autoReplyMode ? 1 : 0
-        }), {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return jsonResponse({ success: true, auto_reply_mode_enabled: autoReplyMode ? 1 : 0 });
     } catch (error) {
         await logError(error, env, 'Update Auto Reply Mode');
-        return new Response('Internal Server Error', { status: 500 });
+        return errorResponse('Internal Server Error');
     }
 }
 
 export async function deleteMessage(request, env, messageId) {
     try {
         const user = await getUserFromRequest(request, env);
-        if (!user) {
-            return new Response('Unauthorized', { status: 401 });
-        }
+        if (!user) return errorResponse('Unauthorized', 401);
 
         const message = await env.DB.prepare(`
       SELECT m.*, c.user_id
@@ -336,13 +232,8 @@ export async function deleteMessage(request, env, messageId) {
       WHERE m.id = ?
     `).bind(messageId).first();
 
-        if (!message) {
-            return new Response('메시지를 찾을 수 없습니다.', { status: 404 });
-        }
-
-        if (message.user_id !== user.id) {
-            return new Response('Forbidden', { status: 403 });
-        }
+        if (!message) return errorResponse('메시지를 찾을 수 없습니다.', 404);
+        if (message.user_id !== user.id) return errorResponse('Forbidden', 403);
 
         if (message.message_type === 'image' && message.file_id) {
             try {
@@ -364,87 +255,58 @@ export async function deleteMessage(request, env, messageId) {
         const cacheKey = `chat_history:${message.conversation_id}`;
         await env.KV.delete(cacheKey);
 
-        return new Response(JSON.stringify({ success: true }), {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return jsonResponse({ success: true });
     } catch (error) {
         await logError(error, env, 'Delete Message');
-        return new Response('Internal Server Error', { status: 500 });
+        return errorResponse('Internal Server Error');
     }
 }
 
 export async function deleteConversation(request, env, conversationId) {
     try {
-        const user = await getUserFromRequest(request, env);
-        if (!user) {
-            return new Response('Unauthorized', { status: 401 });
-        }
-
-        // 즐겨찾기 대화는 삭제 불가
-        const conversation = await env.DB.prepare(
-            'SELECT is_favorite FROM conversations WHERE id = ? AND user_id = ?'
-        ).bind(conversationId, user.id).first();
-
-        if (!conversation) {
-            return new Response('Not Found', { status: 404 });
-        }
+        const { error, conversation } = await requireConversationOwner(request, env, conversationId, 'is_favorite');
+        if (error) return error;
 
         if (conversation.is_favorite) {
-            return new Response('즐겨찾기 대화는 삭제할 수 없습니다.', { status: 400 });
+            return errorResponse('즐겨찾기 대화는 삭제할 수 없습니다.', 400);
         }
 
-        // 트랜잭션으로 관련 데이터 모두 삭제
         await env.DB.prepare('DELETE FROM conversation_participants WHERE conversation_id = ?')
             .bind(conversationId).run();
         await env.DB.prepare('DELETE FROM messages WHERE conversation_id = ?')
             .bind(conversationId).run();
-        await env.DB.prepare('DELETE FROM conversations WHERE id = ? AND user_id = ?')
-            .bind(conversationId, user.id).run();
+        await env.DB.prepare('DELETE FROM conversations WHERE id = ?')
+            .bind(conversationId).run();
 
-        return new Response(JSON.stringify({ success: true }), {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return jsonResponse({ success: true });
     } catch (error) {
         await logError(error, env, 'Delete Conversation');
-        return new Response('Internal Server Error', { status: 500 });
+        return errorResponse('Internal Server Error');
     }
 }
 
 export async function toggleAutoragMemory(request, env) {
     try {
         const user = await getUserFromRequest(request, env);
-        if (!user) {
-            return new Response('Unauthorized', { status: 401 });
-        }
+        if (!user) return errorResponse('Unauthorized', 401);
 
         const { conversationId, useAutoragMemory } = await request.json();
 
-        if (!conversationId) {
-            return new Response('대화 ID가 필요합니다.', { status: 400 });
-        }
+        if (!conversationId) return errorResponse('대화 ID가 필요합니다.', 400);
 
-        // 대화방 소유권 확인
         const conversation = await env.DB.prepare(
             'SELECT id FROM conversations WHERE id = ? AND user_id = ?'
         ).bind(conversationId, user.id).first();
 
-        if (!conversation) {
-            return new Response('대화를 찾을 수 없습니다.', { status: 404 });
-        }
+        if (!conversation) return errorResponse('대화를 찾을 수 없습니다.', 404);
 
-        // AutoRAG 메모리 설정 업데이트
         await env.DB.prepare(
             'UPDATE conversations SET use_autorag_memory = ? WHERE id = ?'
         ).bind(useAutoragMemory ? 1 : 0, conversationId).run();
 
-        return new Response(JSON.stringify({
-            success: true,
-            use_autorag_memory: useAutoragMemory ? 1 : 0
-        }), {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return jsonResponse({ success: true, use_autorag_memory: useAutoragMemory ? 1 : 0 });
     } catch (error) {
         await logError(error, env, 'Toggle AutoRAG Memory');
-        return new Response('AutoRAG 메모리 설정 변경에 실패했습니다.', { status: 500 });
+        return errorResponse('AutoRAG 메모리 설정 변경에 실패했습니다.');
     }
 }

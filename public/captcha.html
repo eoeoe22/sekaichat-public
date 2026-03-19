@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anime Captcha</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+
+    <style>
+        body {
+            background-color: #f8f9fa;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+
+        .captcha-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            width: 100%;
+            max-width: 550px;
+            justify-content: center;
+        }
+
+        .nav-btn {
+            background: none;
+            border: none;
+            font-size: 2.5rem;
+            color: #4a90e2;
+            cursor: pointer;
+            transition: all 0.2s;
+            padding: 10px;
+            z-index: 100;
+        }
+
+        .nav-btn:hover {
+            color: #2a6dbd;
+            transform: scale(1.2);
+        }
+
+        .captcha-card {
+            width: 400px;
+            background: white;
+            border: 1px solid #ddd;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .captcha-header {
+            background-color: #4a90e2;
+            color: white;
+            padding: 24px;
+            min-height: 120px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .captcha-header .question-text {
+            font-size: 1.6rem;
+            color: #ffffff;
+            font-weight: bold;
+            line-height: 1.2;
+        }
+
+        .captcha-header span {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .grid-wrapper {
+            position: relative;
+            height: 390px;
+            background-color: #fff;
+        }
+
+        #loader {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+        }
+
+        .captcha-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 5px;
+            padding: 7px;
+            opacity: 0;
+            transition: opacity 0.1s ease-in;
+        }
+
+        .captcha-grid.loaded {
+            opacity: 1;
+            transition: opacity 0.8s ease-out;
+        }
+
+        .tile {
+            position: relative;
+            aspect-ratio: 1 / 1;
+            cursor: pointer;
+            overflow: hidden;
+            background-color: #eee;
+        }
+
+        .tile img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: all 0.15s ease-in-out;
+            pointer-events: none;
+        }
+
+        .tile.selected img {
+            transform: scale(0.8);
+            opacity: 0.7;
+        }
+
+        .tile.selected::after {
+            content: "\F26E";
+            font-family: "bootstrap-icons";
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            background: white;
+            color: #4a90e2;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.1rem;
+            z-index: 10;
+        }
+
+        .captcha-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            border-top: 1px solid #eee;
+        }
+
+        .footer-icons {
+            display: flex;
+            gap: 15px;
+            color: #6c757d;
+            font-size: 1.2rem;
+        }
+
+        .footer-icons i {
+            cursor: pointer;
+        }
+
+        .footer-icons i:hover {
+            color: #333;
+        }
+
+        .btn-verify {
+            background-color: #4a90e2;
+            border: none;
+            padding: 8px 25px;
+            font-weight: bold;
+        }
+
+        @media (max-width: 500px) {
+            .captcha-container {
+                gap: 5px;
+            }
+
+            .captcha-card {
+                width: 320px;
+            }
+
+            .grid-wrapper {
+                height: 310px;
+            }
+        }
+    </style>
+</head>
+
+<body oncontextmenu="return false">
+
+    <div class="captcha-container">
+        <button class="nav-btn" id="prevBtn"><i class="bi bi-chevron-left"></i></button>
+
+        <div class="captcha-card">
+            <div class="captcha-header">
+                <strong id="questionMain" class="question-text">질문 로딩 중...</strong>
+                <span id="questionSub" class="d-block mt-2">타일을 모두 선택하세요. 없으면 건너뛰기.</span>
+            </div>
+
+            <div class="grid-wrapper">
+                <div id="loader">
+                    <div class="spinner-border text-primary"></div>
+                </div>
+                <div class="captcha-grid" id="gridContainer"></div>
+            </div>
+
+            <div class="captcha-footer">
+                <div class="footer-icons">
+                    <i class="bi bi-arrow-clockwise" id="refreshBtn" title="새로고침"></i>
+                    <!-- 수정: 리스트 버튼 추가 -->
+                    <i class="bi bi-list-ul" id="listBtn" title="캡챠 목록"></i>
+                    <!-- 수정: info 아이디 추가 -->
+                    <i class="bi bi-info-circle" id="infoBtn" title="도움말"></i>
+                </div>
+                <button id="verifyBtn" class="btn btn-primary btn-verify">Skip</button>
+            </div>
+        </div>
+
+        <button class="nav-btn" id="nextBtn"><i class="bi bi-chevron-right"></i></button>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        /**
+         * Misaka Anti-Cheat System
+         */
+        (function () {
+            const detectDevTools = () => {
+                const check = () => {
+                    const threshold = 160;
+                    const widthThreshold = window.outerWidth - window.innerWidth > threshold;
+                    const heightThreshold = window.outerHeight - window.innerHeight > threshold;
+
+                    if (widthThreshold || heightThreshold) {
+                        console.clear();
+                        console.log(
+                            "%c미사카는 당신이 코드를 훔쳐보고 있다는 사실을 눈치채고 경멸의 눈초리로 바라봅니다, 라고 미사카는 보고합니다.",
+                            "color: #ff4757; font-size: 18px; font-weight: bold; background: #2f3542; padding: 10px; border-radius: 5px; border: 2px solid #ff4757;"
+                        );
+                    }
+                };
+                window.addEventListener('resize', check);
+                setInterval(check, 1000);
+            };
+            detectDevTools();
+
+            const API_BASE = "https://sekaich.at/images/capcha/";
+            const captchaConfigs = [
+                {
+                    id: "mikoto",
+                    themeName: "미사카 캡챠",
+                    // 수정: 테마 설명 추가
+                    description: "오리지널 미사카 미코토를 찾아보세요.",
+                    baseUrl: API_BASE + "misaka/",
+                    getQuestion: () => ({ text: "미사카 미코토", check: (tag) => tag === 'mikoto' }),
+                    pool: [
+                        { name: "mikoto.png", tag: "mikoto" }, { name: "mikoto2.png", tag: "mikoto" },
+                        { name: "mikoto3.png", tag: "mikoto" }, { name: "mikoto5.png", tag: "mikoto" },
+                        { name: "mikoto6.png", tag: "mikoto" }, { name: "mikoto7.png", tag: "mikoto" },
+                        { name: "mikoto8.png", tag: "mikoto" }, { name: "dolie.png", tag: "etc" },
+                        { name: "dolie2.png", tag: "etc" }, { name: "lastorder.png", tag: "etc" },
+                        { name: "lastorder2.png", tag: "etc" }, { name: "lastorder3.png", tag: "etc" },
+                        { name: "lastorder4.png", tag: "etc" }, { name: "lastorder5.png", tag: "etc" },
+                        { name: "sisters.png", tag: "etc" }, { name: "sisters2.png", tag: "etc" },
+                        { name: "sisters3.png", tag: "etc" }, { name: "sisters4.png", tag: "etc" },
+                        { name: "sisters5.png", tag: "etc" }, { name: "sisters6.png", tag: "etc" },
+                        { name: "sisters7.png", tag: "etc" }, { name: "worst.png", tag: "etc" },
+                        { name: "worst2.png", tag: "etc" }, { name: "worst3.png", tag: "etc" },
+                        { name: "worst4.png", tag: "etc" }
+                    ]
+                },
+                {
+                    id: "kuro_kuu",
+                    themeName: "쿠로코 & 쿠우코 캡챠",
+                    // 수정: 테마 설명 추가
+                    description: "빨간색 계열 빈유 트윈테일 조연 캐릭터 두명을 구별하세요.<br>4가지 질문이 랜덤으로 제시됩니다.",
+                    baseUrl: API_BASE + "ku/",
+                    lastQuestionIndex: -1,
+                    questions: [
+                        { text: '사람', check: (tag) => tag === 'kuroko' },
+                        { text: '레즈비언', check: (tag) => true },
+                        { text: '화염 능력자', check: (tag) => tag === 'kuuko' },
+                        { text: '텔레포터', check: (tag) => tag === 'kuroko' },
+                    ],
+                    pool: [
+                        { name: "kuroko.png", tag: "kuroko" }, { name: "kuroko1.png", tag: "kuroko" },
+                        { name: "kuroko2.png", tag: "kuroko" }, { name: "kuroko3.png", tag: "kuroko" },
+                        { name: "kuroko4.png", tag: "kuroko" }, { name: "kuroko5.png", tag: "kuroko" },
+                        { name: "kuuko.png", tag: "kuuko" }, { name: "kuuko1.png", tag: "kuuko" },
+                        { name: "kuuko2.png", tag: "kuuko" }, { name: "kuuko3.png", tag: "kuuko" },
+                        { name: "kuuko4.png", tag: "kuuko" }, { name: "kuuko5.png", tag: "kuuko" }
+                    ],
+                    getQuestion: function () {
+                        let nextIndex;
+                        do {
+                            nextIndex = Math.floor(Math.random() * this.questions.length);
+                        } while (nextIndex === this.lastQuestionIndex);
+                        this.lastQuestionIndex = nextIndex;
+                        return this.questions[nextIndex];
+                    }
+                },
+                {
+                    id: "malecaptcha",
+                    themeName: "남자 캡챠",
+                    description: "남자\n타일을 모두 선택하세요. 없으면 건너뛰기.",
+                    baseUrl: API_BASE + "gender/",
+                    lastQuestionIndex: -1,
+                    questions: [
+                        {
+                            text: "남자",
+                            subtitle: "타일을 모두 선택하세요. 없으면 건너뛰기.",
+                            check: (tag) => tag === 'male'
+                        },
+                        {
+                            text: "여자",
+                            subtitle: "타일을 모두 선택하세요. 없으면 건너뛰기.",
+                            check: (tag) => tag === 'female'
+                        }
+                    ],
+                    getQuestion: function () {
+                        let nextIndex;
+                        do {
+                            nextIndex = Math.floor(Math.random() * this.questions.length);
+                        } while (nextIndex === this.lastQuestionIndex);
+                        this.lastQuestionIndex = nextIndex;
+                        return this.questions[nextIndex];
+                    },
+                    pool: [
+                        { name: "astolfo.webp", tag: "male" }, { name: "felix.webp", tag: "male" },
+                        { name: "hideri.webp", tag: "male" }, { name: "kaoru.webp", tag: "male" },
+                        { name: "mizuki.webp", tag: "male" }, { name: "nagisa.webp", tag: "male" },
+                        { name: "ren.webp", tag: "male" }, { name: "saika.webp", tag: "male" },
+                        { name: "seike.webp", tag: "male" }, { name: "venti.webp", tag: "male" },
+                        { name: "rin.webp", tag: "female" }, { name: "shiho.webp", tag: "female" },
+                        { name: "kanade.webp", tag: "female" }, { name: "mahiro.webp", tag: "other" },
+                        { name: "uichiro.webp", tag: "male" }, { name: "hasta.webp", tag: "male" },
+                        { name: "hitori.webp", tag: "female" }, { name: "ritka.webp", tag: "female" },
+                        { name: "miku.webp", tag: "female" }, { name: "chino.webp", tag: "female" },
+                        { name: "mikoto.png", tag: "female" }, { name: "kuroko.png", tag: "female" },
+                        { name: "nyaruko.webp", tag: "female" }, { name: "kuuko.png", tag: "female" }
+
+                    ]
+                }
+            ];
+
+            let currentConfigIndex = 0;
+            let currentQuestion = null;
+            let currentCorrectIndices = [];
+
+            const loader = document.getElementById('loader');
+            const verifyBtn = document.getElementById('verifyBtn');
+            const questionMain = document.getElementById('questionMain');
+            const questionSub = document.getElementById('questionSub');
+
+            function shuffle(array) {
+                return array.sort(() => Math.random() - 0.5);
+            }
+
+            async function renderGrid() {
+                const config = captchaConfigs[currentConfigIndex];
+                currentQuestion = config.getQuestion();
+                currentCorrectIndices = [];
+
+                questionMain.innerText = currentQuestion.text;
+                questionSub.innerText = currentQuestion.subtitle || "타일을 모두 선택하세요. 없으면 건너뛰기.";
+                gridContainer.classList.remove('loaded');
+
+                setTimeout(async () => {
+                    loader.style.display = 'block';
+                    gridContainer.innerHTML = "";
+                    updateButton();
+
+                    const shuffledPool = shuffle([...config.pool]);
+                    const selectedImages = shuffledPool.slice(0, 9);
+
+                    const promises = selectedImages.map((imgData, index) => {
+                        return new Promise((resolve) => {
+                            const div = document.createElement('div');
+                            div.className = 'tile';
+                            div.dataset.index = index;
+                            div.dataset.tag = imgData.tag;
+
+                            if (currentQuestion.check(imgData.tag)) {
+                                currentCorrectIndices.push(index);
+                            }
+
+                            const img = document.createElement('img');
+                            img.src = config.baseUrl + imgData.name;
+                            img.draggable = false;
+                            img.onload = () => resolve();
+                            img.onerror = () => resolve();
+
+                            div.appendChild(img);
+                            div.onclick = () => {
+                                div.classList.toggle('selected');
+                                updateButton();
+                            };
+                            gridContainer.appendChild(div);
+                        });
+                    });
+
+                    await Promise.all(promises);
+                    loader.style.display = 'none';
+                    gridContainer.classList.add('loaded');
+                }, 150);
+            }
+
+            function updateButton() {
+                const selected = document.querySelectorAll('.tile.selected').length;
+                verifyBtn.innerText = selected > 0 ? "Verify" : "Skip";
+            }
+
+            function changeTheme(dir) {
+                currentConfigIndex = (currentConfigIndex + dir + captchaConfigs.length) % captchaConfigs.length;
+                if (captchaConfigs[currentConfigIndex].lastQuestionIndex !== undefined) {
+                    captchaConfigs[currentConfigIndex].lastQuestionIndex = -1;
+                }
+                renderGrid();
+            }
+
+            verifyBtn.onclick = () => {
+                const tiles = document.querySelectorAll('.tile');
+                const config = captchaConfigs[currentConfigIndex];
+                let selectedIndices = [];
+                let selectedTags = [];
+
+                tiles.forEach(tile => {
+                    if (tile.classList.contains('selected')) {
+                        selectedIndices.push(parseInt(tile.dataset.index));
+                        selectedTags.push(tile.dataset.tag);
+                    }
+                });
+
+                // 정답 판정 (other는 제외하고 판단)
+                const isCorrect = Array.from(tiles).every(tile => {
+                    const tag = tile.dataset.tag;
+                    const isRequired = currentQuestion.check(tag);
+                    if (tag === 'other') return true;
+                    return tile.classList.contains('selected') === isRequired;
+                });
+
+                let alertOptions = {
+                    confirmButtonColor: '#4a90e2'
+                };
+
+                if (isCorrect) {
+                    alertOptions.icon = 'success';
+                    alertOptions.title = '성공!';
+
+                    if (config.id === 'mikoto') {
+                        alertOptions.text = '미사카는 당신이 사람임을 확인했습니다.';
+                    } else if (config.id === 'malecaptcha') {
+                        const otherInGrid = Array.from(tiles).some(tile => tile.dataset.tag === 'other');
+                        if (otherInGrid) {
+                            const selectedOther = selectedTags.includes('other');
+                            const isMaleQuestion = currentQuestion.text === '남자';
+
+                            // 남자 질문일 때: 선택됨 -> 마히로, 미선택 -> 미하리
+                            // 여자 질문일 때: 선택됨 -> 미하리, 미선택 -> 마히로 (반대)
+                            if (isMaleQuestion) {
+                                alertOptions.text = selectedOther
+                                    ? '마히로의 내면은 아직 흑심가득 자택경비원?'
+                                    : '미하리의 약효는 대단했다!';
+                            } else {
+                                alertOptions.text = selectedOther
+                                    ? '미하리의 약효는 대단했다!'
+                                    : '마히로의 내면은 아직 흑심가득 자택경비원?';
+                            }
+                        } else {
+                            alertOptions.text = '';
+                        }
+                    }
+                } else {
+                    alertOptions.icon = 'error';
+                    alertOptions.title = '실패';
+                    alertOptions.confirmButtonColor = '#d33';
+
+                    if (config.id === 'mikoto') {
+                        alertOptions.text = '미사카는 당신을 수상한 사람으로 분류합니다.';
+                    }
+                }
+
+                Swal.fire(alertOptions).then(() => renderGrid());
+            };
+
+            // --- 추가 기능 구현 ---
+
+            // 1. 목록 버튼 기능: 캡챠 리스트 보여주기 및 선택
+            document.getElementById('listBtn').onclick = () => {
+                const inputOptions = {};
+                captchaConfigs.forEach((config, index) => {
+                    inputOptions[index] = config.themeName;
+                });
+
+                Swal.fire({
+                    title: '캡챠 목록 선택',
+                    input: 'select',
+                    inputOptions: inputOptions,
+                    inputValue: currentConfigIndex,
+                    showCancelButton: true,
+                    confirmButtonText: '이동',
+                    cancelButtonText: '취소',
+                    confirmButtonColor: '#4a90e2'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        currentConfigIndex = parseInt(result.value);
+                        renderGrid();
+                    }
+                });
+            };
+
+            // 2. Info 버튼 기능: 현재 테마 설명 출력
+            document.getElementById('infoBtn').onclick = () => {
+                const config = captchaConfigs[currentConfigIndex];
+                Swal.fire({
+                    title: config.themeName,
+                    html: config.description,
+                    icon: 'info',
+                    confirmButtonColor: '#4a90e2'
+                });
+            };
+
+            // 이벤트 리스너 연결
+            document.getElementById('prevBtn').onclick = () => changeTheme(-1);
+            document.getElementById('nextBtn').onclick = () => changeTheme(1);
+            document.getElementById('refreshBtn').onclick = () => renderGrid();
+
+            renderGrid();
+        })();
+    </script>
+
+</body>
+
+
+</html>

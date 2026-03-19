@@ -1,4 +1,4 @@
-import { generateSalt, hashPassword, verifyPassword, logError, logDebug, createJwt, getAuth } from './utils.js';
+import { generateSalt, hashPassword, verifyPassword, logError, logDebug, createJwt, getAuth, buildCookieHeader } from './utils.js';
 
 export const handleAuth = {
   async discord(request, env) {
@@ -45,63 +45,40 @@ export const handleAuth = {
           const result = await env.DB.prepare(
             'INSERT INTO users (username, password_hash, salt, nickname, discord_id, discord_username, discord_avatar) VALUES (?, ?, ?, ?, ?, ?, ?)'
           ).bind(username, passwordHash, salt, nickname, discordUser.id, discordUser.username, discordUser.avatar).run();
-          
-          // 사용자 생성 확인 및 조회
+
           if (!result.meta || !result.meta.last_row_id) {
             await logError(new Error('Failed to create user: no last_row_id returned'), env, 'Discord OAuth - User Creation');
             return new Response('Failed to create user account', { status: 500 });
           }
-          
+
           user = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(result.meta.last_row_id).first();
-          
+
           if (!user) {
             await logError(new Error(`User creation succeeded but user not found with ID: ${result.meta.last_row_id}`), env, 'Discord OAuth - User Verification');
             return new Response('User creation verification failed', { status: 500 });
           }
         }
       } else {
-        // 이미 연동된 사용자의 경우, 사용자명과 아바타 정보 업데이트
         await env.DB.prepare('UPDATE users SET discord_username = ?, discord_avatar = ? WHERE id = ?')
           .bind(discordUser.username, discordUser.avatar, user.id).run();
       }
 
-      const token = await createJwt({ 
-        userId: user.id, 
-        exp: Date.now() + (30 * 24 * 60 * 60 * 1000), // Discord 로그인은 기본 30일
+      const token = await createJwt({
+        userId: user.id,
+        exp: Date.now() + (30 * 24 * 60 * 60 * 1000),
         iat: Date.now()
       }, env);
 
       const responseUrl = new URL(request.url);
       const referer = request.headers.get('referer');
       const redirectPath = referer && new URL(referer).pathname === '/settings' ? '/settings' : '/main';
-      
+
       const response = new Response(null, {
         status: 302,
-        headers: {
-          'Location': redirectPath
-        }
+        headers: { 'Location': redirectPath }
       });
 
-      const cookieOptions = [
-        `token=${token}`,
-        'HttpOnly',
-        'SameSite=Lax',
-        'Max-Age=2592000', // 30일 (초 단위)
-        'Path=/'
-      ];
-      
-      if (!responseUrl.hostname.includes('localhost') && 
-          !responseUrl.hostname.includes('127.0.0.1') && 
-          !responseUrl.hostname.includes('.local')) {
-        cookieOptions.push(`Domain=${responseUrl.hostname}`);
-      }
-      
-      const isSecure = responseUrl.protocol === 'https:';
-      if (isSecure) {
-        cookieOptions.push('Secure');
-      }
-      
-      response.headers.set('Set-Cookie', cookieOptions.join('; '));
+      response.headers.set('Set-Cookie', buildCookieHeader(token, responseUrl, 2592000));
       return response;
 
     } catch (error) {
@@ -117,77 +94,53 @@ export const handleAuth = {
       const password = formData.get('password');
       const keepLogin = formData.get('keepLogin') === 'on';
       const turnstileToken = formData.get('cf-turnstile-response');
-      
+
       logDebug('로그인 시도', 'Auth Login', { username, keepLogin });
-      
-      // Turnstile 검증
+
       const turnstileValid = await verifyTurnstile(turnstileToken, env);
       if (!turnstileValid) {
         logDebug('Turnstile 검증 실패', 'Auth Login');
         return new Response('으....이....', { status: 400 });
       }
-      
-      // 사용자 조회
+
       const user = await env.DB.prepare('SELECT * FROM users WHERE username = ?')
         .bind(username).first();
-      
+
       if (!user || !(await verifyPassword(password, user.password_hash, user.salt))) {
         logDebug('사용자 인증 실패', 'Auth Login');
         return new Response('으....이....', { status: 401 });
       }
-      
-      // JWT 토큰 생성 - keepLogin이 체크되면 30일, 아니면 24시간
-      const expirationTime = keepLogin ? 
-        (30 * 24 * 60 * 60 * 1000) : // 30일
-        (24 * 60 * 60 * 1000);      // 24시간
-        
-      const token = await createJwt({ 
-        userId: user.id, 
+
+      const expirationTime = keepLogin ?
+        (30 * 24 * 60 * 60 * 1000) :
+        (24 * 60 * 60 * 1000);
+
+      const token = await createJwt({
+        userId: user.id,
         exp: Date.now() + expirationTime,
         iat: Date.now()
       }, env);
-      
+
       logDebug('토큰 생성 완료', 'Auth Login', { userId: user.id, keepLogin, expirationTime });
-      
+
       const url = new URL(request.url);
-      const isSecure = url.protocol === 'https:';
-      
+      const maxAge = keepLogin ? (30 * 24 * 60 * 60) : 86400;
+
       const response = new Response(JSON.stringify({ success: true }), {
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Cache-Control': 'no-cache, no-store, must-revalidate'
         }
       });
-      
-      // 쿠키 설정 - keepLogin이 체크되면 30일, 아니면 24시간
-      const maxAge = keepLogin ? (30 * 24 * 60 * 60) : 86400; // 30일 또는 24시간 (초 단위)
-      
-      const cookieOptions = [
-        `token=${token}`,
-        'HttpOnly',
-        'SameSite=Lax',
-        `Max-Age=${maxAge}`,
-        'Path=/'
-      ];
-      
-      if (!url.hostname.includes('localhost') && 
-          !url.hostname.includes('127.0.0.1') && 
-          !url.hostname.includes('.local')) {
-        cookieOptions.push(`Domain=${url.hostname}`);
-      }
-      
-      if (isSecure) {
-        cookieOptions.push('Secure');
-      }
-      
-      response.headers.set('Set-Cookie', cookieOptions.join('; '));
+
+      response.headers.set('Set-Cookie', buildCookieHeader(token, url, maxAge));
       return response;
     } catch (error) {
       await logError(error, env, 'Auth Login');
       return new Response('으....이....', { status: 500 });
     }
   },
-  
+
   async register(request, env) {
     try {
       const formData = await request.formData();
@@ -196,22 +149,22 @@ export const handleAuth = {
       const nickname = formData.get('nickname');
       const geminiApiKey = formData.get('gemini_api_key') || null;
       const turnstileToken = formData.get('cf-turnstile-response');
-      
+
       const turnstileValid = await verifyTurnstile(turnstileToken, env);
       if (!turnstileValid) {
         return new Response('으....이....', { status: 400 });
       }
-      
+
       const existingUser = await env.DB.prepare('SELECT id FROM users WHERE username = ?')
         .bind(username).first();
-      
+
       if (existingUser) {
         return new Response('으....이....', { status: 409 });
       }
-      
+
       const salt = generateSalt();
       const passwordHash = await hashPassword(password, salt);
-      
+
       const result = await env.DB.prepare(
         'INSERT INTO users (username, nickname, password_hash, salt, gemini_api_key) VALUES (?, ?, ?, ?, ?) RETURNING id'
       ).bind(username, nickname, passwordHash, salt, geminiApiKey).first();
@@ -221,43 +174,22 @@ export const handleAuth = {
         return new Response('으....이....', { status: 500 });
       }
 
-      const userId = result.id;
-
-      const token = await createJwt({ 
-        userId: userId, 
-        exp: Date.now() + (30 * 24 * 60 * 60 * 1000), // 회원가입 시 기본 30일
+      const token = await createJwt({
+        userId: result.id,
+        exp: Date.now() + (30 * 24 * 60 * 60 * 1000),
         iat: Date.now()
       }, env);
 
       const url = new URL(request.url);
-      const isSecure = url.protocol === 'https:';
 
       const response = new Response(JSON.stringify({ success: true }), {
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Cache-Control': 'no-cache, no-store, must-revalidate'
         }
       });
 
-      const cookieOptions = [
-        `token=${token}`,
-        'HttpOnly',
-        'SameSite=Lax',
-        'Max-Age=2592000', // 30일 (초 단위)
-        'Path=/'
-      ];
-
-      if (!url.hostname.includes('localhost') && 
-          !url.hostname.includes('127.0.0.1') && 
-          !url.hostname.includes('.local')) {
-        cookieOptions.push(`Domain=${url.hostname}`);
-      }
-
-      if (isSecure) {
-        cookieOptions.push('Secure');
-      }
-
-      response.headers.set('Set-Cookie', cookieOptions.join('; '));
+      response.headers.set('Set-Cookie', buildCookieHeader(token, url, 2592000));
       return response;
 
     } catch (error) {
@@ -265,34 +197,15 @@ export const handleAuth = {
       return new Response('으....이....', { status: 500 });
     }
   },
-  
+
   async logout(request, env) {
     const url = new URL(request.url);
-    const isSecure = url.protocol === 'https:';
-    
+
     const response = new Response(JSON.stringify({ success: true }), {
       headers: { 'Content-Type': 'application/json' }
     });
-    
-    const cookieOptions = [
-      'token=',
-      'HttpOnly',
-      'SameSite=Lax',
-      'Max-Age=0',
-      'Path=/'
-    ];
-    
-    if (!url.hostname.includes('localhost') && 
-        !url.hostname.includes('127.0.0.1') && 
-        !url.hostname.includes('.local')) {
-      cookieOptions.push(`Domain=${url.hostname}`);
-    }
-    
-    if (isSecure) {
-      cookieOptions.push('Secure');
-    }
-    
-    response.headers.set('Set-Cookie', cookieOptions.join('; '));
+
+    response.headers.set('Set-Cookie', buildCookieHeader('', url, 0));
     return response;
   }
 };
@@ -304,7 +217,6 @@ export async function updateProfileImage(userId, request, env) {
             return new Response('User not found', { status: 404 });
         }
 
-        // DELETE request
         if (request.method === 'DELETE') {
             if (user.profile_image) {
                 await env.R2.delete(user.profile_image);
@@ -315,7 +227,6 @@ export async function updateProfileImage(userId, request, env) {
             return new Response('Profile image deleted', { status: 200 });
         }
 
-        // POST request
         const formData = await request.formData();
         const file = formData.get('profileImage');
         const visible = formData.get('visible') === 'true';
@@ -323,21 +234,18 @@ export async function updateProfileImage(userId, request, env) {
         let imageKey = user.profile_image;
 
         if (file) {
-            // Validate file type and size
             const allowedTypes = ['image/png', 'image/jpeg', 'image/webp'];
             if (!allowedTypes.includes(file.type)) {
                 return new Response('Invalid file type', { status: 400 });
             }
-            if (file.size > 2 * 1024 * 1024) { // 2MB
+            if (file.size > 2 * 1024 * 1024) {
                 return new Response('File size exceeds 2MB', { status: 400 });
             }
 
-            // Delete old image if it exists
             if (user.profile_image) {
                 await env.R2.delete(user.profile_image);
             }
 
-            // Upload new image
             const ext = file.name.split('.').pop();
             imageKey = `profile_images/${userId}-${Date.now()}.${ext}`;
             await env.R2.put(imageKey, await file.arrayBuffer(), {
@@ -345,7 +253,6 @@ export async function updateProfileImage(userId, request, env) {
             });
         }
 
-        // Update database
         await env.DB.prepare('UPDATE users SET profile_image = ?, profile_image_visible = ? WHERE id = ?')
             .bind(imageKey, visible, userId)
             .run();
@@ -371,7 +278,7 @@ async function verifyTurnstile(token, env) {
         response: token
       })
     });
-    
+
     const result = await response.json();
     return result.success;
   } catch {
@@ -401,14 +308,12 @@ async function getDiscordAccessToken(code, env) {
   return data.access_token;
 }
 
-async function getDiscordUser(accessToken, env) {
+async function getDiscordUser(accessToken) {
   const response = await fetch('https://discord.com/api/users/@me', {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
   });
 
-  const data = await response.json();
-  return data;
+  return await response.json();
 }
-

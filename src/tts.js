@@ -147,8 +147,8 @@ export async function handleTTS(request, env) {
 
 /**
  * TTS Translation API handler using Gemini
- * Note: Using gemini-2.0-flash as primary model since 2.5 models mentioned in
- * instructions don't appear to exist in current Gemini API
+ * Note: Translation uses gemini-2.5-flash-lite for speed and cost-efficiency.
+ * The core chat model is gemini-3-flash-preview.
  */
 export async function handleTTSTranslation(request, env) {
   try {
@@ -347,9 +347,11 @@ export async function handleTTSDebug(request, env) {
         ttsServiceUrl: env.TTS_SERVICE_URL || 'Not configured'
       },
       models: {
-        primary: 'gemini-2.5-flash-lite',
+        chat_core: 'gemini-3-flash-preview',
+        translation: 'gemini-2.5-flash-lite',
         fallback: 'gemini-2.0-flash',
         endpoints: [
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent',
           'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent',
           'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent'
         ]

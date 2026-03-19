@@ -35,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             document.getElementById('kanadeLoginSection').style.display = 'none';
             conversationSelectSection.style.display = 'block';
-            
+
             await loadKanadeConversations();
 
         } catch (error) {
@@ -130,7 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .map(input => parseInt(input.value));
 
         if (selectedConversations.length === 0) {
-            alert('이전할 대화내역을 하나 이상 선택해주세요.');
+            Swal.fire({ icon: 'warning', text: '이전할 대화내역을 하나 이상 선택해주세요.' });
             return;
         }
 
@@ -154,7 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const data = await response.json();
             updateProgress(data.total, data.migrated);
-            
+
             migrationProgressSection.style.display = 'none';
             migrationResultSection.style.display = 'block';
             migrationResultMessage.textContent = `총 ${data.total}개의 대화 중 ${data.migrated}개를 성공적으로 이전했습니다.`;
@@ -173,7 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
         migrationProgressBar.setAttribute('aria-valuenow', percentage);
         migrationStatus.textContent = `${migrated} / ${total} 개 이전 완료`;
     }
-    
+
     function escapeHtml(text) {
         if (typeof text !== 'string') {
             return '';
@@ -185,6 +185,6 @@ document.addEventListener('DOMContentLoaded', () => {
             '"': '&quot;',
             "'": '&#039;'
         };
-        return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+        return text.replace(/[&<>"']/g, function (m) { return map[m]; });
     }
 });

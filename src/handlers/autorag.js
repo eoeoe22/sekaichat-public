@@ -256,7 +256,6 @@ ${query}`;
 
             // Extract results with filenames
             formattedResults = await extractAutoragResults(results, env);
-            // filename is included in results for frontend to request full content
         } catch (autoragError) {
             // Handle specific AutoRAG errors
             console.error('AutoRAG service error:', autoragError.message);
@@ -362,91 +361,7 @@ export async function handleAutoragStatus(request, env) {
     }
 }
 
-export async function handleVocaloidSearch(request, env) {
-    try {
-        const { query } = await request.json();
-        if (!query) {
-            return new Response('Query is required', { status: 400 });
-        }
 
-        const results = await env.AI.autorag("vocaloid").search({ query });
-
-        let matches = [];
-        let characters = [];
-
-        // Fetch character data for matching
-        try {
-            const { results: charResults } = await env.DB.prepare(
-                'SELECT name, profile_image FROM characters'
-            ).all();
-            if (charResults) {
-                characters = charResults;
-            }
-        } catch (e) {
-            console.error('Failed to fetch characters', e);
-        }
-
-        if (results && results.data && Array.isArray(results.data)) {
-            // Extract IDs from filenames (e.g., "5.txt" -> 5)
-            const ids = results.data
-                .map(item => {
-                    const filename = item.attributes ? item.attributes.filename : null;
-                    if (filename && filename.endsWith('.txt')) {
-                        const id = parseInt(filename.replace('.txt', ''));
-                        return isNaN(id) ? null : id;
-                    }
-                    return null;
-                })
-                .filter(id => id !== null);
-
-            if (ids.length > 0) {
-                // Fetch details from D1
-                const placeholders = ids.map(() => '?').join(',');
-                const queryStmt = `SELECT * FROM lyrics WHERE id IN (${placeholders})`;
-
-                const { results: dbResults } = await env.VOCALOID_DB.prepare(queryStmt)
-                    .bind(...ids)
-                    .all();
-
-                const dbMap = new Map();
-                if (dbResults) {
-                    dbResults.forEach(row => dbMap.set(row.id, row));
-                }
-
-                matches = ids.map(id => {
-                    const row = dbMap.get(id);
-                    if (!row) return null;
-
-                    let info = {};
-                    try {
-                        info = JSON.parse(row.info);
-                    } catch (e) {
-                        console.error('Failed to parse info JSON', e);
-                    }
-
-                    return {
-                        id: row.id,
-                        title: row.title,
-                        title_jp: row.title_jp,
-                        url: row.url,
-                        composer: info['작곡'] || info['작사&작곡'] || null,
-                        lyricist: info['작사'] || info['작사&작곡'] || null,
-                        singer: info['노래'] || null,
-                        lyrics: row.lyrics,
-                        original_content: null
-                    };
-                }).filter(item => item !== null);
-            }
-        }
-
-        return new Response(JSON.stringify({ matches, characters }), {
-            headers: { 'Content-Type': 'application/json' }
-        });
-    } catch (error) {
-        await logError(error, env, 'Vocaloid Search');
-        return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-    }
-}
 
 // Fetch full content from R2 by filename
 export async function handleAutoragFullContent(request, env) {

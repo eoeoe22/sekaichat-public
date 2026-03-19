@@ -42,61 +42,9 @@ CREATE TABLE conversations (
     FOREIGN KEY (user_id) REFERENCES users(id)
 )
 
-CREATE TABLE dating_characters (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    description TEXT,
-    internal_prompt TEXT NOT NULL, -- Private prompt not shown to users
-    likes TEXT, -- Comma-separated list
-    dislikes TEXT, -- Comma-separated list
-    profile_image TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
 
-CREATE TABLE "dating_checkpoints" (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    dating_conversation_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    conversation_data TEXT NOT NULL,
-    current_location TEXT NOT NULL,
-    time_mode TEXT NOT NULL,
-    current_time TEXT NOT NULL,
-    current_date TEXT NOT NULL,
-    message_count INTEGER NOT NULL,
-    character_memory TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (dating_conversation_id) REFERENCES "dating_conversations"(id) ON DELETE CASCADE
-)
 
-CREATE TABLE dating_conversations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    character_id INTEGER NOT NULL,
-    title TEXT,
-    current_location TEXT DEFAULT 'online',
-    time_mode TEXT DEFAULT 'auto',
-    current_time TEXT DEFAULT 'morning',
-    current_date TEXT DEFAULT '2025.04.25',
-    random_events_enabled INTEGER DEFAULT 1,
-    next_affection_update INTEGER DEFAULT 5,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (character_id) REFERENCES dating_characters(id)
-)
 
-CREATE TABLE "dating_messages" (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    dating_conversation_id INTEGER NOT NULL,
-    role TEXT NOT NULL,
-    content TEXT NOT NULL,
-    message_time TEXT NOT NULL,
-    location TEXT NOT NULL,
-    is_offline_meeting INTEGER DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (dating_conversation_id) REFERENCES "dating_conversations"(id) ON DELETE CASCADE
-)
 
 CREATE TABLE files (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -140,8 +88,10 @@ CREATE TABLE "messages" (
 CREATE TABLE notices (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     content TEXT NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    type TEXT DEFAULT 'main' NOT NULL
 )
+
 
 CREATE TABLE sekai (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

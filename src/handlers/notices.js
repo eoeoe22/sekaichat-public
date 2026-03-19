@@ -2,9 +2,20 @@ import { logError } from '../utils.js';
 
 export async function getNotice(request, env) {
     try {
-        const { results } = await env.DB.prepare(
-            'SELECT content FROM notices ORDER BY id DESC'
-        ).all();
+        const { searchParams } = new URL(request.url);
+        const type = searchParams.get('type');
+
+        let query = 'SELECT content, type FROM notices';
+        let params = [];
+
+        if (type) {
+            query += ' WHERE type = ?';
+            params.push(type);
+        }
+
+        query += ' ORDER BY id DESC';
+
+        const { results } = await env.DB.prepare(query).bind(...params).all();
 
         return new Response(JSON.stringify(results || []), {
             headers: { 'Content-Type': 'application/json' }

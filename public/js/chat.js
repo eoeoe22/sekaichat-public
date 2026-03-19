@@ -9,34 +9,40 @@ let currentWorkMode = false;
 let currentShowTime = true;
 let currentSituationPrompt = '';
 let showMarkdown = true;
-let imageGenerationEnabled = false;
 let affectionSystemEnabled = false;
 let autoragMemoryEnabled = false;
 let autoReplyModeEnabled = true;
 let continuousResponseEnabled = false; // 기본값은 false (연속응답 비활성화)
 let awaitingUserMessageResponse = false;
-let proModeEnabled = false;
+let thinkingLevel = 'MEDIUM';
 let generationAbortController = null;
 
 let isGeneratingTTS = false;
 
-function showSnackbar(message, type = 'info') { // type: 'info', 'warning', 'success'
-    const snackbar = document.getElementById('snackbar');
-    if (!snackbar) return;
-    snackbar.textContent = message;
+function showSnackbar(message, type = 'info') {
+    const iconMap = {
+        'info': 'info',
+        'warning': 'warning',
+        'success': 'success',
+        'error': 'error'
+    };
 
-    snackbar.classList.remove('warning', 'success');
-    if (type === 'warning') {
-        snackbar.classList.add('warning');
-    } else if (type === 'success') {
-        snackbar.classList.add('success');
-    }
+    const Toast = Swal.mixin({
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+        didOpen: (toast) => {
+            toast.addEventListener('mouseenter', Swal.stopTimer)
+            toast.addEventListener('mouseleave', Swal.resumeTimer)
+        }
+    });
 
-    snackbar.classList.add('show');
-
-    setTimeout(function() {
-        snackbar.classList.remove('show');
-    }, 3000);
+    Toast.fire({
+        icon: iconMap[type] || 'info',
+        title: message
+    });
 }
 
 // TTS handling function
@@ -75,8 +81,9 @@ async function handleTTS(characterNameCode, messageText, messageId) {
         });
 
         if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(errorText || 'TTS 생성 실패');
+            const error = new Error(await response.text() || 'TTS 생성 실패');
+            error.status = response.status;
+            throw error;
         }
 
         const audioBlob = await response.blob();
@@ -97,15 +104,16 @@ async function handleTTS(characterNameCode, messageText, messageId) {
 
     } catch (error) {
         console.error('TTS 오류:', error);
-        showSnackbar(error.message, 'warning');
+        if (error.status === 503) {
+            showSnackbar('현재 TTS를 이용할수 없는 상태입니다', 'error');
+        } else {
+            showSnackbar(error.message, 'warning');
+        }
     } finally {
         isGeneratingTTS = false;
     }
 }
 
-// 🔧 이미지 생성 쿨다운 관리
-let lastImageGeneration = null;
-const IMAGE_COOLDOWN_SECONDS = 20;
 
 const GEMINI_ERROR_GUIDANCE = `<h4><i class=\"bi bi-question-circle-fill\"></i> 원인</h4>
 <p>메시지 처리 중 오류가 발생하는 주요 원인은 다음과 같습니다.</p>
@@ -213,13 +221,13 @@ function setupSidebarContentObservers() {
 }
 
 // 외부 스크립트에서 수동 호출 가능
-window.markConversationsLoaded = function() {
+window.markConversationsLoaded = function () {
     if (!globalLoadingState.conversations) {
         globalLoadingState.conversations = true;
         globalLoadingState.checkAndHide();
     }
 };
-window.markNoticeLoaded = function() {
+window.markNoticeLoaded = function () {
     if (!globalLoadingState.notice) {
         globalLoadingState.notice = true;
         globalLoadingState.checkAndHide();
@@ -246,72 +254,6 @@ function updateStartConversationPanel() {
     }
 }
 
-// 이미지 생성 쿨다운 확인 함수
-function isImageGenerationOnCooldown() {
-    if (!lastImageGeneration) return false;
-    const now = Date.now();
-    const elapsed = now - lastImageGeneration;
-    return elapsed < (IMAGE_COOLDOWN_SECONDS * 1000);
-}
-
-// 남은 쿨다운 시간 계산 (초 단위)
-function getRemainingImageCooldown() {
-    if (!lastImageGeneration) return 0;
-    const now = Date.now();
-    const elapsed = now - lastImageGeneration;
-    const remaining = Math.max(0, (IMAGE_COOLDOWN_SECONDS * 1000) - elapsed);
-    return Math.ceil(remaining / 1000);
-}
-
-// 이미지 생성 쿨다운 설정
-function setImageGenerationCooldown() {
-    lastImageGeneration = Date.now();
-}
-
-
-
-// 이미지 생성 지원 캐릭터 확인
-function supportsImageGeneration(characterId, characterType) {
-    const character = availableCharacters.find(c => c.id === characterId && (c.category === characterType || (c.is_user_character && characterType === 'user') || (!c.is_user_character && characterType === 'official')));
-    if (character) {
-        return character.supports_image_generation;
-    }
-    // If not in availableCharacters, check currentCharacters
-    const currentCharacter = currentCharacters.find(c => c.id === characterId && c.character_type === characterType);
-    if (currentCharacter) {
-        return currentCharacter.supports_image_generation;
-    }
-    return false;
-}
-
-// 현재 대화에 이미지 생성 지원 캐릭터 있는지
-function hasImageGenerationSupport() {
-    return currentCharacters.some(char => char.supports_image_generation);
-}
-
-// 이미지 생성 UI 업데이트
-function updateImageGenerationUI() {
-    const imgGenToggle = document.getElementById('imageGenerationToggle');
-    const imgGenSection = document.querySelector('.image-toggle-section');
-    if (!imgGenToggle || !imgGenSection) return;
-
-    const hasSupport = hasImageGenerationSupport();
-    if (!hasSupport) {
-        imgGenToggle.disabled = true;
-        imgGenToggle.checked = false;
-        imageGenerationEnabled = false;
-        imgGenSection.style.opacity = '0.5';
-        imgGenSection.title = '현재 대화에 이미지 생성을 지원하는 캐릭터가 없습니다. (에나, 호나미, 또는 커스텀 캐릭터 필요)';
-    } else {
-        imgGenToggle.disabled = false;
-        imgGenSection.style.opacity = '1';
-        imgGenSection.title = '이미지 생성을 지원하는 캐릭터가 있습니다!';
-        if (!imageGenerationEnabled) {
-            imgGenToggle.checked = true;
-            imageGenerationEnabled = true;
-        }
-    }
-}
 
 // 페이지 로드 시 초기화
 document.addEventListener('DOMContentLoaded', async () => {
@@ -330,10 +272,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadCharacters();
 
         if (window.initializeSidebar) {
-            try { await window.initializeSidebar(); } catch(e){ console.error(e); }
+            try { await window.initializeSidebar(); } catch (e) { console.error(e); }
         }
         if (window.initializeUserCharacters) {
-            try { await window.initializeUserCharacters(); } catch(e){ console.error(e); }
+            try { await window.initializeUserCharacters(); } catch (e) { console.error(e); }
         }
 
         // URL에서 대화 ID 확인 및 로드
@@ -347,7 +289,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         setTimeout(() => {
             if (window.loadConversations && !window._wrappedLoadConversations) {
                 const original = window.loadConversations;
-                window.loadConversations = async function(...args) {
+                window.loadConversations = async function (...args) {
                     const result = await original.apply(this, args);
                     if (!globalLoadingState.conversations) {
                         globalLoadingState.conversations = true;
@@ -361,7 +303,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }, 100);
 
         setupEventListeners();
-        updateImageGenerationUI();
 
         // 혹시 이미 DOM이 채워져 있는 경우 빠르게 체크
         setTimeout(() => {
@@ -382,7 +323,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // [추가] 대화 시작하기 버튼 클릭 이벤트
         const startBtn = document.getElementById('startConversationBtn');
         if (startBtn) {
-            startBtn.addEventListener('click', async function() {
+            startBtn.addEventListener('click', async function () {
                 await startNewConversation();
             });
         }
@@ -442,7 +383,7 @@ function markdownToHtml(src) {
     if (!src) return '';
     let text = escapeHtml(src);
     text = text.replace(/``````/g,
-        (m, lang, code) => `<pre class=\"md-code-block\"><code${escapeHtml(code).replace(/</g,'&lt;')}</code></pre>`);
+        (m, lang, code) => `<pre class=\"md-code-block\"><code${escapeHtml(code).replace(/</g, '&lt;')}</code></pre>`);
     text = text.replace(/`([^`]+)`/g, (m, code) => `<code.class=\"md-inline-code\">${code}</code>`);
     text = text.replace(/!\[([^\]]*)\]\([^)]+\)/g, (m, alt) => alt);
     text = text.replace(/!\[([^\]]+)\]\(([^)]+)\)/g, (m, t) => `<span class=\"md-link-text\">${t}</span>`);
@@ -487,8 +428,8 @@ function applyMarkdownMode() {
         if (!parentMsg) return;
         const role =
             parentMsg.classList.contains('assistant') ? 'assistant' :
-            parentMsg.classList.contains('user') ? 'user' :
-            parentMsg.classList.contains('system') ? 'system' : '';
+                parentMsg.classList.contains('user') ? 'user' :
+                    parentMsg.classList.contains('system') ? 'system' : '';
         const raw = bubble.getAttribute('data-raw');
         if (raw == null) return;
         if (!showMarkdown) {
@@ -514,10 +455,7 @@ async function checkAuthentication() {
     }
 }
 
-function handleImageGenerationToggle(e) {
-    imageGenerationEnabled = e.target.checked;
-    updateImageGenerationUI();
-}
+
 
 // 이벤트 리스너 설정
 function setupEventListeners() {
@@ -528,8 +466,27 @@ function setupEventListeners() {
     if (messageInput) {
         messageInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
+                // 모바일 환경 체크 (화면 너비 또는 User Agent)
+                const isMobile = window.matchMedia("(max-width: 768px)").matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+                if (isMobile) {
+                    // 모바일에서는 기본 동작(줄바꿈) 허용
+                    return;
+                }
                 e.preventDefault();
                 document.getElementById('sendButton').click();
+            }
+        });
+
+        // 클립보드 이미지 붙여넣기 지원
+        messageInput.addEventListener('paste', (e) => {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    const file = items[i].getAsFile();
+                    if (file) {
+                        showImagePreview(file);
+                    }
+                }
             }
         });
 
@@ -549,7 +506,12 @@ function setupEventListeners() {
 
     document.getElementById('imageUploadBtn').addEventListener('click', () => {
         if (!userInfo.has_api_key) {
-            alert('이미지 업로드는 개인 Gemini API 키가 등록된 사용자만 이용할 수 있습니다.');
+            Swal.fire({
+                icon: 'info',
+                title: '안내',
+                text: '이미지 업로드는 개인 Gemini API 키가 등록된 사용자만 이용할 수 있습니다.',
+                confirmButtonColor: '#007bff'
+            });
             return;
         }
         document.getElementById('imageInput').click();
@@ -577,13 +539,15 @@ function setupEventListeners() {
     }
 
     document.getElementById('workModeToggle').addEventListener('change', handleWorkModeToggle);
-    document.getElementById('proModeToggle').addEventListener('change', (e) => {
-        proModeEnabled = e.target.checked;
-    });
+    const thinkingLevelSelect = document.getElementById('thinkingLevelSelect');
+    if (thinkingLevelSelect) {
+        thinkingLevelSelect.addEventListener('change', (e) => {
+            thinkingLevel = e.target.value;
+        });
+    }
     document.getElementById('showTimeToggle').addEventListener('change', handleShowTimeToggle);
     document.getElementById('emojiToggle').addEventListener('change', handleEmojiToggle);
     document.getElementById('imageToggle').addEventListener('change', handleImageToggle);
-    document.getElementById('imageGenerationToggle').addEventListener('change', handleImageGenerationToggle);
 
     document.getElementById('editTitleBtn').addEventListener('click', showEditTitleModal);
     document.getElementById('saveTitleBtn').addEventListener('click', saveConversationTitle);
@@ -625,19 +589,7 @@ function handleImageToggle(e) {
 async function handleWorkModeToggle(e) {
     const isWorkMode = e.target.checked;
     currentWorkMode = isWorkMode;
-    const proModeSection = document.getElementById('proModeToggleSection');
-    if (proModeSection) {
-        if (isWorkMode) {
-            proModeSection.style.display = 'block';
-        } else {
-            proModeSection.style.display = 'none';
-            const proModeToggle = document.getElementById('proModeToggle');
-            if (proModeToggle) {
-                proModeToggle.checked = false;
-            }
-            proModeEnabled = false;
-        }
-    }
+
 
     if (!currentConversationId) return;
     try {
@@ -651,16 +603,10 @@ async function handleWorkModeToggle(e) {
         } else {
             e.target.checked = !isWorkMode;
             currentWorkMode = !isWorkMode;
-            if (proModeSection) {
-                proModeSection.style.display = currentWorkMode ? 'block' : 'none';
-            }
         }
     } catch {
         e.target.checked = !isWorkMode;
         currentWorkMode = !isWorkMode;
-        if (proModeSection) {
-            proModeSection.style.display = currentWorkMode ? 'block' : 'none';
-        }
     }
 }
 
@@ -687,7 +633,13 @@ async function handleShowTimeToggle(e) {
 
 // 제목 수정 모달
 function showEditTitleModal() {
-    if (!currentConversationId) { alert('먼저 대화를 시작해주세요.'); return; }
+    if (!currentConversationId) {
+        Swal.fire({
+            icon: 'warning',
+            text: '먼저 대화를 시작해주세요.'
+        });
+        return;
+    }
     const modal = new bootstrap.Modal(document.getElementById('editTitleModal'));
     const input = document.getElementById('newTitleInput');
     const currentTitle = document.getElementById('conversationTitle').textContent;
@@ -699,7 +651,13 @@ function showEditTitleModal() {
 // 대화 제목 저장
 async function saveConversationTitle() {
     const newTitle = document.getElementById('newTitleInput').value.trim();
-    if (!newTitle) { alert('제목을 입력해주세요.'); return; }
+    if (!newTitle) {
+        Swal.fire({
+            icon: 'warning',
+            text: '제목을 입력해주세요.'
+        });
+        return;
+    }
     try {
         const response = await fetch(`/api/conversations/${currentConversationId}/title`, {
             method: 'POST',
@@ -710,15 +668,29 @@ async function saveConversationTitle() {
             document.getElementById('conversationTitle').textContent = newTitle;
             bootstrap.Modal.getInstance(document.getElementById('editTitleModal')).hide();
             if (window.loadConversations) await window.loadConversations();
-        } else alert('제목 수정 실패');
+        } else {
+            Swal.fire({
+                icon: 'error',
+                text: '제목 수정 실패'
+            });
+        }
     } catch {
-        alert('제목 수정 실패');
+        Swal.fire({
+            icon: 'error',
+            text: '제목 수정 실패'
+        });
     }
 }
 
 // 상황 프롬프트 모달
 function showSituationPromptModal() {
-    if (!currentConversationId) { alert('먼저 대화를 시작해주세요.'); return; }
+    if (!currentConversationId) {
+        Swal.fire({
+            icon: 'warning',
+            text: '먼저 대화를 시작해주세요.'
+        });
+        return;
+    }
     const modal = new bootstrap.Modal(document.getElementById('situationPromptModal'));
     const input = document.getElementById('situationPromptInput');
     input.value = currentSituationPrompt;
@@ -741,16 +713,38 @@ async function saveSituationPrompt() {
         if (response.ok) {
             currentSituationPrompt = prompt;
             bootstrap.Modal.getInstance(document.getElementById('situationPromptModal')).hide();
-            alert(prompt ? '상황 설정이 저장되었습니다.' : '상황 설정이 삭제되었습니다.');
-        } else alert('상황 설정 저장 실패');
+            Swal.fire({
+                icon: 'success',
+                text: prompt ? '상황 설정이 저장되었습니다.' : '상황 설정이 삭제되었습니다.'
+            });
+        } else {
+            Swal.fire({
+                icon: 'error',
+                text: '상황 설정 저장 실패'
+            });
+        }
     } catch {
-        alert('상황 설정 저장 실패');
+        Swal.fire({
+            icon: 'error',
+            text: '상황 설정 저장 실패'
+        });
     }
 }
 
 // 상황 프롬프트 삭제
 async function clearSituationPrompt() {
-    if (!confirm('상황 설정을 삭제하시겠습니까?')) return;
+    const result = await Swal.fire({
+        title: '상황 설정 삭제',
+        text: '상황 설정을 삭제하시겠습니까?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '삭제',
+        cancelButtonText: '취소'
+    });
+
+    if (!result.isConfirmed) return;
     document.getElementById('situationPromptInput').value = '';
     await saveSituationPrompt();
 }
@@ -760,7 +754,7 @@ async function handleAffectionToggle(e) {
     const useAffectionSys = e.target.checked;
     if (!currentConversationId) {
         e.target.checked = false;
-        alert('먼저 대화를 시작해주세요.');
+        Swal.fire({ icon: 'warning', text: '먼저 대화를 시작해주세요.' });
         return;
     }
 
@@ -784,12 +778,18 @@ async function handleAffectionToggle(e) {
             }
         } else {
             e.target.checked = !useAffectionSys;
-            alert('호감도 시스템 설정 변경에 실패했습니다.');
+            Swal.fire({
+                icon: 'error',
+                text: '호감도 시스템 설정 변경에 실패했습니다.'
+            });
         }
     } catch (error) {
         console.error('호감도 시스템 토글 실패:', error);
         e.target.checked = !useAffectionSys;
-        alert('호감도 시스템 설정 변경에 실패했습니다.');
+        Swal.fire({
+            icon: 'error',
+            text: '호감도 시스템 설정 변경에 실패했습니다.'
+        });
     }
 }
 
@@ -797,7 +797,7 @@ async function handleAutoragMemoryToggle(e) {
     const useAutoragMemory = e.target.checked;
     if (!currentConversationId) {
         e.target.checked = false;
-        alert('먼저 대화를 시작해주세요.');
+        Swal.fire({ icon: 'warning', text: '먼저 대화를 시작해주세요.' });
         return;
     }
 
@@ -867,7 +867,7 @@ function handleContinuousResponseToggle(e) {
 // 호감도 관리 모달 표시
 async function showAffectionModal() {
     if (!currentConversationId) {
-        alert('먼저 대화를 시작해주세요.');
+        Swal.fire({ icon: 'warning', text: '먼저 대화를 시작해주세요.' });
         return;
     }
 
@@ -1032,7 +1032,7 @@ async function updateAffectionLevel(characterId, characterType, affectionLevel) 
         });
         if (!response.ok) {
             const errorData = await response.json();
-            alert(`호감도 조절 실패: ${errorData.error}`);
+            Swal.fire({ icon: 'error', text: `호감도 조절 실패: ${errorData.error}` });
             await loadAffectionStatus();
             return;
         }
@@ -1041,7 +1041,7 @@ async function updateAffectionLevel(characterId, characterType, affectionLevel) 
         await loadAffectionStatus();
     } catch (error) {
         console.error('호감도 업데이트 실패:', error);
-        alert('호감도 업데이트 중 오류가 발생했습니다.');
+        Swal.fire({ icon: 'error', text: '호감도 업데이트 중 오류가 발생했습니다.' });
         await loadAffectionStatus(); // 실패 시 원래 값으로 복원
     }
 }
@@ -1156,7 +1156,7 @@ async function loadCharacters() {
                 availableCharacters = await fallbackResponse.json();
                 window.availableCharacters = availableCharacters;
             }
-        } catch(e) {
+        } catch (e) {
             console.error('캐릭터 로드 실패(최종):', e);
         }
     }
@@ -1248,7 +1248,7 @@ async function loadConversation(id) {
         }
     } catch (error) {
         console.error('대화 로드 오류:', error);
-        alert('대화 로드 중 오류가 발생했습니다.');
+        Swal.fire({ icon: 'error', text: '대화 로드 중 오류가 발생했습니다.' });
     }
 }
 
@@ -1283,7 +1283,7 @@ async function sendMessage(role = 'user') {
     if (!currentConversationId) {
         await startNewConversation();
         if (!currentConversationId) {
-            alert('대화 생성 실패');
+            Swal.fire({ icon: 'error', text: '대화 생성 실패' });
             return;
         }
     }
@@ -1329,7 +1329,7 @@ async function sendMessage(role = 'user') {
     }
 }
 
-// 캐릭터 응답 생성
+// 캐릭터 응답 생성 (스트리밍 + 일반 응답 양쪽 지원)
 async function generateCharacterResponse(characterId) {
     if (autoCallInProgress) return;
 
@@ -1342,31 +1342,25 @@ async function generateCharacterResponse(characterId) {
     const character = currentCharacters.find(c => c.id === characterId) ||
         availableCharacters.find(c => c.id === characterId);
 
-    // 항상 텍스트 로딩 버블로 시작
-    const loadingBubble = addMessage('assistant', '...', character?.name, character?.profile_image);
+    // 메시지 버블 생성 (생성 중임을 알리는 '...'를 전달하여 플레이스홀더 표시)
+    const contentElement = addMessage('assistant', '...', character?.name, character?.profile_image);
 
     try {
-        let selectedModel = 'gemini-2.5-flash';
-        if (currentWorkMode && proModeEnabled) {
-            selectedModel = 'gemini-2.5-pro';
-        }
-
         const requestBody = {
             characterId,
             conversationId: currentConversationId,
             workMode: currentWorkMode,
             showTime: currentShowTime,
             situationPrompt: currentSituationPrompt,
-            imageGenerationEnabled,
-            selectedModel
+            isContinuous: continuousResponseEnabled,
+            thinkingLevel
         };
-        if (imageGenerationEnabled) {
-            requestBody.imageCooldownSeconds = getRemainingImageCooldown();
-        }
+
         const imageToggle = document.getElementById('imageToggle');
         if (imageToggle.checked && lastUploadedImageData) {
             requestBody.imageData = lastUploadedImageData;
         }
+
         const response = await fetch('/api/chat/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1374,61 +1368,175 @@ async function generateCharacterResponse(characterId) {
             signal
         });
 
-        // 텍스트 로딩 버블은 항상 제거
-        if (loadingBubble) {
-            const el = loadingBubble.closest('.message');
-            if (el) el.remove();
+        if (!response.ok) {
+            if (response.status === 401) {
+                window.location.href = '/login';
+                return;
+            }
+            throw new Error(`HTTP ${response.status}`);
         }
 
-        if (response.ok) {
+        // Content-Type 확인하여 스트리밍/일반 응답 분기
+        const contentType = response.headers.get('Content-Type') || '';
+        const isStreaming = contentType.includes('text/event-stream');
+
+        if (isStreaming) {
+            // SSE 스트리밍 처리
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullText = '';
+            let buffer = '';
+            let messageId = null;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+
+                            if (data.type === 'chunk') {
+                                fullText += data.text;
+                                if (contentElement) {
+                                    // 첫 번째 청크가 도착하면 플레이스홀더 제거
+                                    if (contentElement.classList.contains('has-placeholder')) {
+                                        contentElement.classList.remove('has-placeholder');
+                                        contentElement.innerHTML = '';
+                                    }
+
+                                    if (showMarkdown) {
+                                        contentElement.innerHTML = markdownToHtml(fullText);
+                                    } else {
+                                        contentElement.textContent = stripMarkdown(fullText);
+                                    }
+                                    contentElement.dataset.raw = fullText;
+                                }
+                                const messagesDiv = document.getElementById('chatMessages');
+                                const isNearBottom = messagesDiv.scrollHeight - messagesDiv.scrollTop - messagesDiv.clientHeight < 100;
+                                if (isNearBottom) {
+                                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                                }
+
+                            } else if (data.type === 'fallback') {
+                                fullText = data.text;
+                                if (contentElement) {
+                                    if (contentElement.classList.contains('has-placeholder')) {
+                                        contentElement.classList.remove('has-placeholder');
+                                        contentElement.innerHTML = '';
+                                    }
+                                    if (showMarkdown) {
+                                        contentElement.innerHTML = markdownToHtml(fullText);
+                                    } else {
+                                        contentElement.textContent = stripMarkdown(fullText);
+                                    }
+                                    contentElement.dataset.raw = fullText;
+                                }
+
+                            } else if (data.type === 'done') {
+                                messageId = data.messageId;
+
+                                if (contentElement) {
+                                    const messageEl = contentElement.closest('.message');
+                                    if (messageEl) {
+                                        messageEl.dataset.messageId = messageId;
+                                        // ✅ Inject delete and TTS buttons
+                                        const actionsDiv = messageEl.querySelector('.message-actions');
+                                        if (actionsDiv) {
+                                            const characterName = messageEl.querySelector('.message-avatar')?.alt || character?.name;
+                                            const ttsBtn = createTTSButton(characterName, fullText, messageId);
+                                            const delBtn = `<button class="message-delete-btn" onclick="deleteMessage(${messageId}, this.closest('.message'))" title="메시지 삭제">
+                                                <i class="bi bi-trash-fill"></i>
+                                            </button>`;
+                                            actionsDiv.innerHTML = ttsBtn + delBtn;
+                                        }
+                                    }
+                                }
+
+
+
+                            } else if (data.type === 'error') {
+                                console.error('서버 에러:', data.error);
+                                // fullText가 있으면 이미 내용을 받은 것이므로 메시지를 유지
+                                if (fullText && fullText.trim().length > 0) {
+                                    showSnackbar('응답 생성 중 일부 오류가 발생했습니다.', 'warning');
+                                    // 메시지는 유지하고 경고만 표시
+                                } else {
+                                    // 아무 내용도 받지 못했을 때만 에러 모달 표시
+                                    if (contentElement) {
+                                        const el = contentElement.closest('.message');
+                                        if (el) el.remove();
+                                    }
+                                    showErrorModal(GEMINI_ERROR_GUIDANCE);
+                                    return;
+                                }
+                            }
+                        } catch (parseError) {
+                            console.warn('SSE 파싱 에러:', parseError, line);
+                        }
+                    }
+                }
+            }
+        } else {
+            // 일반 JSON 응답 처리
             const data = await response.json();
 
-            // 1. 텍스트 메시지가 있으면 먼저 표시
             if (data.newMessage) {
-                addMessage('assistant', data.newMessage.content, character?.name, character?.profile_image, data.newMessage.auto_call_sequence, data.newMessage.id);
-            }
-
-            // 2. 생성할 이미지가 있으면, 이미지 로딩 버블을 표시
-            if (data.generatedImages && data.generatedImages.length > 0) {
-                setImageGenerationCooldown();
-                const imageLoadingBubble = addImageLoadingPlaceholder(character?.name, character?.profile_image);
-
-                // 3. 잠시 후 이미지 로딩 버블을 실제 이미지로 교체
-                setTimeout(() => {
-                    if (imageLoadingBubble) {
-                        const el = imageLoadingBubble.closest('.message');
-                        if (el) el.remove();
+                if (contentElement) {
+                    if (contentElement.classList.contains('has-placeholder')) {
+                        contentElement.classList.remove('has-placeholder');
                     }
-                    data.generatedImages.forEach(image => {
-                        addImageMessage('assistant', image.filename, image.url, image.id, character?.name, character?.profile_image);
-                    });
-                }, 1200); // 1.2초 지연으로 시뮬레이션
-
-            } else if (data.imageGenerationAttempted && !data.newMessage) {
-                // 텍스트 메시지 없이 이미지 생성만 시도했다가 실패한 경우
-                addMessage('system', '이미지 생성에 실패했습니다.');
+                    contentElement.innerHTML = markdownToHtml(data.newMessage.content);
+                    contentElement.dataset.raw = data.newMessage.content;
+                }
+                if (contentElement) {
+                    const messageEl = contentElement.closest('.message');
+                    if (messageEl) {
+                        const messageId = data.newMessage?.id || data.id;
+                        messageEl.dataset.messageId = messageId;
+                        // ✅ Inject delete and TTS buttons
+                        const actionsDiv = messageEl.querySelector('.message-actions');
+                        if (actionsDiv) {
+                            const characterName = messageEl.querySelector('.message-avatar')?.alt || character?.name;
+                            const ttsBtn = createTTSButton(characterName, data.newMessage?.content || data.response, messageId);
+                            const delBtn = `<button class="message-delete-btn" onclick="deleteMessage(${messageId}, this.closest('.message'))" title="메시지 삭제">
+                                <i class="bi bi-trash-fill"></i>
+                            </button>`;
+                            actionsDiv.innerHTML = ttsBtn + delBtn;
+                        }
+                    }
+                }
+            } else if (data.response) {
+                // 기존 응답 형식 호환
+                if (contentElement) {
+                    contentElement.innerHTML = markdownToHtml(data.response);
+                    contentElement.dataset.raw = data.response;
+                }
             }
 
-            awaitingResponse = false;
-            if (window.loadConversations) await window.loadConversations();
 
-        } else if (response.status === 401) {
-            window.location.href = '/login';
-        } else {
-            showErrorModal(GEMINI_ERROR_GUIDANCE);
         }
+
+        awaitingResponse = false;
+        if (window.loadConversations) await window.loadConversations();
+
     } catch (err) {
         if (err.name === 'AbortError') {
             console.log('Character response generation aborted.');
-            if (loadingBubble) { // Abort 시에도 로딩 버블 제거
-                const el = loadingBubble.closest('.message');
+            if (contentElement) {
+                const el = contentElement.closest('.message');
                 if (el) el.remove();
             }
             return;
         }
         console.error('캐릭터 응답 생성 오류:', err);
-        if (loadingBubble) {
-            const el = loadingBubble.closest('.message');
+        if (contentElement) {
+            const el = contentElement.closest('.message');
             if (el) el.remove();
         }
         showErrorModal(GEMINI_ERROR_GUIDANCE);
@@ -1450,7 +1558,6 @@ async function triggerAutoReply() {
     autoCallInProgress = true;
 
     try {
-        // 연속 응답이 비활성화된 경우 한 번만 응답
         const maxSequence = continuousResponseEnabled ? (userInfo?.max_auto_call_sequence || 1) : 1;
         let autoCallCount = 0;
 
@@ -1466,7 +1573,12 @@ async function triggerAutoReply() {
             const selectResponse = await fetch('/api/chat/auto-reply/select-speaker', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ conversationId: currentConversationId }),
+                body: JSON.stringify({
+                    conversationId: currentConversationId,
+                    autoCallCount: autoCallCount,
+                    maxSequence: maxSequence,
+                    isContinuous: continuousResponseEnabled
+                }),
                 signal
             });
 
@@ -1480,20 +1592,16 @@ async function triggerAutoReply() {
             const speaker = selectData.speaker;
 
             if (!speaker) {
-                console.log('[Auto-Reply] No speaker selected. Ending sequence.');
+                console.log(`[Auto-Reply] No speaker selected. Reason: ${selectData.reason || 'unknown'}. Ending sequence.`);
                 break;
             }
             console.log(`[Auto-Reply] Speaker selected: ${speaker.name}`);
 
-            // 2. Show loading bubble
-            const loadingBubble = addMessage('assistant', '...', speaker.name, speaker.profile_image);
+            // 2. 메시지 버블 생성 (플레이스홀더 표시를 위해 '...' 전달)
+            const contentElement = addMessage('assistant', '...', speaker.name, speaker.profile_image);
 
             // 3. Generate the actual message
             console.log(`[Auto-Reply] Generating message for ${speaker.name}...`);
-            let selectedModel = 'gemini-2.5-flash';
-            if (currentWorkMode && proModeEnabled) {
-                selectedModel = 'gemini-2.5-pro';
-            }
 
             const generationPayload = {
                 characterId: speaker.id,
@@ -1501,9 +1609,9 @@ async function triggerAutoReply() {
                 workMode: currentWorkMode,
                 showTime: currentShowTime,
                 situationPrompt: currentSituationPrompt,
-                imageGenerationEnabled: imageGenerationEnabled,
                 autoCallCount: autoCallCount + 1,
-                selectedModel
+                isContinuous: continuousResponseEnabled,
+                thinkingLevel: thinkingLevel
             };
             console.log('[Auto-Reply] Generation payload:', generationPayload);
 
@@ -1514,33 +1622,158 @@ async function triggerAutoReply() {
                 signal
             });
 
-            // 4. Remove loading bubble
-            if (loadingBubble) {
-                const el = loadingBubble.closest('.message');
-                if (el) el.remove();
-            }
-
             if (!generationResponse.ok) {
                 console.error('[Auto-Reply] Message generation failed.', generationResponse.status);
+                if (contentElement) {
+                    const el = contentElement.closest('.message');
+                    if (el) el.remove();
+                }
                 addMessage('system', GEMINI_ERROR_GUIDANCE);
                 break;
             }
 
-            const generationData = await generationResponse.json();
-            console.log('[Auto-Reply] Generation response data:', generationData);
+            // Content-Type 확인하여 스트리밍/일반 응답 분기
+            const contentType = generationResponse.headers.get('Content-Type') || '';
+            const isStreaming = contentType.includes('text/event-stream');
+            let generatedImages = [];
 
-            // 5. Add the new message
-            if (generationData.newMessage) {
-                console.log('[Auto-Reply] Adding new message to chat.');
-                addMessage('assistant', generationData.newMessage.content, speaker.name, speaker.profile_image, generationData.newMessage.auto_call_sequence, generationData.newMessage.id);
+            if (isStreaming) {
+                // SSE 스트리밍 처리
+                const reader = generationResponse.body.getReader();
+                const decoder = new TextDecoder();
+                let fullText = '';
+                let buffer = '';
+                let messageId = null;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+
+                                if (data.type === 'chunk') {
+                                    fullText += data.text;
+                                    if (contentElement) {
+                                        // 첫 번째 청크 도착 시 플레이스홀더 제거
+                                        if (contentElement.classList.contains('has-placeholder')) {
+                                            contentElement.classList.remove('has-placeholder');
+                                            contentElement.innerHTML = '';
+                                        }
+
+                                        if (showMarkdown) {
+                                            contentElement.innerHTML = markdownToHtml(fullText);
+                                        } else {
+                                            contentElement.textContent = stripMarkdown(fullText);
+                                        }
+                                        contentElement.dataset.raw = fullText;
+                                    }
+                                    const messagesDiv = document.getElementById('chatMessages');
+                                    const isNearBottom = messagesDiv.scrollHeight - messagesDiv.scrollTop - messagesDiv.clientHeight < 100;
+                                    if (isNearBottom) {
+                                        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                                    }
+
+                                } else if (data.type === 'fallback') {
+                                    fullText = data.text;
+                                    if (contentElement) {
+                                        if (contentElement.classList.contains('has-placeholder')) {
+                                            contentElement.classList.remove('has-placeholder');
+                                            contentElement.innerHTML = '';
+                                        }
+                                        if (showMarkdown) {
+                                            contentElement.innerHTML = markdownToHtml(fullText);
+                                        } else {
+                                            contentElement.textContent = stripMarkdown(fullText);
+                                        }
+                                        contentElement.dataset.raw = fullText;
+                                    }
+
+                                } else if (data.type === 'done') {
+                                    messageId = data.messageId;
+                                    generatedImages = data.generatedImages || [];
+
+                                    if (contentElement) {
+                                        const messageEl = contentElement.closest('.message');
+                                        if (messageEl) {
+                                            messageEl.dataset.messageId = messageId;
+                                            // ✅ [ADD] Inject delete and TTS buttons
+                                            const actionsDiv = messageEl.querySelector('.message-actions');
+                                            if (actionsDiv) {
+                                                const characterName = messageEl.querySelector('.message-avatar')?.alt || speaker.name;
+                                                const ttsBtn = createTTSButton(characterName, fullText, messageId);
+                                                const delBtn = `<button class="message-delete-btn" onclick="deleteMessage(${messageId}, this.closest('.message'))" title="메시지 삭제">
+                                                    <i class="bi bi-trash-fill"></i>
+                                                </button>`;
+                                                actionsDiv.innerHTML = ttsBtn + delBtn;
+                                            }
+                                        }
+                                    }
+
+                                } else if (data.type === 'error') {
+                                    console.error('[Auto-Reply] 서버 에러:', data.error);
+                                    if (contentElement) {
+                                        const el = contentElement.closest('.message');
+                                        if (el) el.remove();
+                                    }
+                                    break;
+                                }
+                            } catch (parseError) {
+                                console.warn('[Auto-Reply] SSE 파싱 에러:', parseError, line);
+                            }
+                        }
+                    }
+                }
             } else {
-                console.warn('[Auto-Reply] No newMessage found in generation response.');
+                // 일반 JSON 응답 처리
+                const data = await generationResponse.json();
+                console.log('[Auto-Reply] Generation response data:', data);
+
+                if (data.newMessage) {
+                    if (contentElement) {
+                        if (contentElement.classList.contains('has-placeholder')) {
+                            contentElement.classList.remove('has-placeholder');
+                        }
+                        contentElement.innerHTML = markdownToHtml(data.newMessage.content);
+                        contentElement.dataset.raw = data.newMessage.content;
+                    }
+                    if (contentElement) {
+                        const messageEl = contentElement.closest('.message');
+                        if (messageEl) {
+                            const messageId = data.newMessage?.id || data.id;
+                            messageEl.dataset.messageId = messageId;
+                            // ✅ Inject delete and TTS buttons
+                            const actionsDiv = messageEl.querySelector('.message-actions');
+                            if (actionsDiv) {
+                                const characterName = messageEl.querySelector('.message-avatar')?.alt || speaker.name;
+                                const ttsBtn = createTTSButton(characterName, data.newMessage?.content || data.response, messageId);
+                                const delBtn = `<button class="message-delete-btn" onclick="deleteMessage(${messageId}, this.closest('.message'))" title="메시지 삭제">
+                                    <i class="bi bi-trash-fill"></i>
+                                </button>`;
+                                actionsDiv.innerHTML = ttsBtn + delBtn;
+                            }
+                        }
+                    }
+                } else if (data.response) {
+                    if (contentElement) {
+                        contentElement.innerHTML = markdownToHtml(data.response);
+                        contentElement.dataset.raw = data.response;
+                    }
+                }
+
+                generatedImages = data.generatedImages || [];
             }
 
-            if (generationData.generatedImages && generationData.generatedImages.length > 0) {
+            // 이미지 처리
+            if (generatedImages.length > 0) {
                 setImageGenerationCooldown();
-                // Only update character profiles, don't display images (they're now persisted in DB)
-                for (const image of generationData.generatedImages) {
+                for (const image of generatedImages) {
                     await updateCharacterProfileImage(speaker.id, image.url);
                 }
             }
@@ -1567,7 +1800,7 @@ async function triggerAutoReply() {
 
 // 캐릭터 초대 모달
 function showInviteModal() {
-    if (!currentConversationId) { alert('먼저 대화를 시작해주세요.'); return; }
+    if (!currentConversationId) { Swal.fire({ icon: 'warning', text: '먼저 대화를 시작해주세요.' }); return; }
     const modal = new bootstrap.Modal(document.getElementById('inviteModal'));
     const container = document.getElementById('availableCharacters');
     container.innerHTML = '';
@@ -1641,7 +1874,7 @@ function updateInvitedCharactersUI() {
         avatar.src = character.profile_image;
         avatar.alt = character.name;
         avatar.className = 'invited-character-avatar clickable';
-        avatar.onerror = function() { this.src = '/images/characters/kanade.webp'; };
+        avatar.onerror = function () { this.src = '/images/characters/kanade.webp'; };
         avatarContainer.appendChild(avatar);
         container.appendChild(avatarContainer);
     });
@@ -1721,12 +1954,12 @@ async function handleImageUpload(event) {
     if (!file) return;
 
     if (!userInfo.has_api_key) {
-        alert('이미지 업로드는 개인 Gemini API 키가 등록된 사용자만 이용할 수 있습니다.');
+        Swal.fire({ icon: 'info', text: '이미지 업로드는 개인 Gemini API 키가 등록된 사용자만 이용할 수 있습니다.' });
         return;
     }
 
     if (!validateImageFile(file)) {
-        alert('지원하지 않는 형식이거나 5MB 초과입니다.');
+        Swal.fire({ icon: 'warning', text: '지원하지 않는 형식이거나 5MB 초과입니다.' });
         return;
     }
 
@@ -1790,7 +2023,7 @@ function initializeImageEditor(file) {
     imageEditorCtx = imageEditorCanvas.getContext('2d');
 
     const img = new Image();
-    img.onload = function() {
+    img.onload = function () {
         // Set canvas size maintaining aspect ratio
         const maxWidth = 600;
         const maxHeight = 400;
@@ -2084,7 +2317,7 @@ function applyCrop() {
     const height = Math.abs(cropEndY - cropStartY);
 
     if (width < 10 || height < 10) {
-        alert('크롭 영역이 너무 작습니다.');
+        Swal.fire({ icon: 'warning', text: '크롭 영역이 너무 작습니다.' });
         return;
     }
 
@@ -2106,7 +2339,7 @@ function applyCrop() {
 
     // Update original image data
     const croppedImage = new Image();
-    croppedImage.onload = function() {
+    croppedImage.onload = function () {
         originalImageData = {
             img: croppedImage,
             width: width,
@@ -2147,7 +2380,7 @@ async function confirmImageUpload() {
     if (!currentConversationId) {
         await startNewConversation();
         if (!currentConversationId) {
-            alert('대화방 생성 실패');
+            Swal.fire({ icon: 'error', text: '대화방 생성 실패' });
             return;
         }
     }
@@ -2188,7 +2421,7 @@ async function confirmImageUpload() {
 
     } catch (e) {
         console.error(e);
-        alert('업로드 실패');
+        Swal.fire({ icon: 'error', text: '업로드 실패' });
     } finally {
         uploadModal.hide();
     }
@@ -2250,7 +2483,18 @@ function addImageMessage(role, fileName, imageUrl, messageId = null, characterNa
 
 // 메시지 삭제
 async function deleteMessage(messageId, messageElement) {
-    if (!confirm('이 메시지를 삭제하시겠습니까?')) return;
+    const result = await Swal.fire({
+        title: '메시지 삭제',
+        text: '이 메시지를 삭제하시겠습니까?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '삭제',
+        cancelButtonText: '취소'
+    });
+
+    if (!result.isConfirmed) return;
     try {
         const response = await fetch(`/api/messages/${messageId}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' } });
         if (response.ok) {
@@ -2398,24 +2642,26 @@ function addMessage(role, content, characterName = null, characterImage = null, 
         const isLoadingPlaceholder = typeof rawForMarkdown === 'string' && rawForMarkdown.trim().startsWith('...');
 
         if (isLoadingPlaceholder) {
-            // 로딩 UI: Bootstrap의 spinner-grow 애니메이션 사용
+            // 로딩 UI: Bootstrap의 placeholder-glow 애니메이션 사용
             messageDiv.innerHTML = `
                 <img src="${avatarSrc}" alt="${escapeHtml(altText)}" class="message-avatar" onerror="this.src='/images/characters/kanade.webp'">
                 <div class="message-content">
-                    <div class="message-bubble has-placeholder" data-raw="${escapeHtml(rawForMarkdown).replace(/"/g,'&quot;')}" aria-live="polite" aria-label="답변 생성 중">
-                        <div class="d-flex justify-content-center align-items-center" style="height: 40px;">
-                            <div class="spinner-grow spinner-grow-sm" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                        </div>
+                    <div class="message-bubble has-placeholder" data-raw="${escapeHtml(rawForMarkdown).replace(/"/g, '&quot;')}" aria-live="polite" aria-label="답변 생성 중">
+                        <p class="card-text placeholder-glow mb-0">
+                            <span class="placeholder col-7"></span>
+                            <span class="placeholder col-4"></span>
+                            <span class="placeholder col-4"></span>
+                            <span class="placeholder col-6"></span>
+                        </p>
                     </div>
+                    <div class="message-actions"></div>
                 </div>`;
         } else {
             const ttsButtonHtml = createTTSButton(characterName, rawForMarkdown, messageId);
             messageDiv.innerHTML = `
                 <img src="${avatarSrc}" alt="${escapeHtml(altText)}" class="message-avatar" onerror="this.src='/images/characters/kanade.webp'">
                 <div class="message-content">
-                    <div class="message-bubble" data-raw="${escapeHtml(rawForMarkdown).replace(/"/g,'&quot;')}">
+                    <div class="message-bubble" data-raw="${escapeHtml(rawForMarkdown).replace(/"/g, '&quot;')}">
                         ${showMarkdown ? markdownToHtml(rawForMarkdown) : processedText}
                     </div>
                     ${emoji ? createCustomEmojiHTML(emoji) : ''}
@@ -2428,17 +2674,17 @@ function addMessage(role, content, characterName = null, characterImage = null, 
     } else if (role === 'system') {
         messageDiv.innerHTML = `
             <div class="message-content">
-                <div class="message-bubble system-message" data-raw="${escapeHtml(rawForMarkdown).replace(/"/g,'&quot;')}">${processedText}</div>
+                <div class="message-bubble system-message" data-raw="${escapeHtml(rawForMarkdown).replace(/"/g, '&quot;')}">${processedText}</div>
             </div>`;
     } else if (role === 'situation') {
         messageDiv.innerHTML = `
             <div class="message-content">
-                <div class="message-bubble situation-message" data-raw="${escapeHtml(rawForMarkdown).replace(/"/g,'&quot;')}"><i class="bi bi-card-text"></i> ${processedText}</div>
+                <div class="message-bubble situation-message" data-raw="${escapeHtml(rawForMarkdown).replace(/"/g, '&quot;')}"><i class="bi bi-card-text"></i> ${processedText}</div>
             </div>`;
     } else {
         messageDiv.innerHTML = `
             <div class="message-content">
-                <div class="message-bubble" data-raw="${escapeHtml(rawForMarkdown).replace(/"/g,'&quot;')}">
+                <div class="message-bubble" data-raw="${escapeHtml(rawForMarkdown).replace(/"/g, '&quot;')}">
                     ${showMarkdown ? markdownToHtml(rawForMarkdown) : processedText}
                 </div>
                 ${emoji ? createCustomEmojiHTML(emoji) : ''}
@@ -2477,7 +2723,7 @@ async function updateCharacterProfileImage(characterId, imageUrl) {
         character.profile_image = `/api/user-characters/image/${imageKey}`;
         updateInvitedCharactersUI();
         if (typeof updateHeaderCharacterAvatars === 'function') {
-            try { updateHeaderCharacterAvatars(); } catch(e){}
+            try { updateHeaderCharacterAvatars(); } catch (e) { }
         }
         addMessage('system', `✨ ${character.name}의 프로필 이미지가 업데이트되었습니다!`);
         return true;

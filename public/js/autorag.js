@@ -132,7 +132,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     searchButton.addEventListener('click', async () => {
         const query = queryInput.value.trim();
         if (!query) {
-            alert('검색할 내용을 입력해주세요.');
+            Swal.fire({ icon: 'warning', text: '검색할 내용을 입력해주세요.' });
             return;
         }
 
@@ -290,10 +290,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const formattedContent = lines.map(formatLine).join('');
 
                 let filenameDisplay = '';
-                let expandButton = '';
+                let resultBody = '';
+
                 if (result.filename) {
                     filenameDisplay = `<small class="text-muted d-block mt-1"><i class="bi bi-file-earmark"></i> 파일: ${escapeHtml(result.filename)}</small>`;
-                    expandButton = `<button class="btn btn-sm btn-outline-primary mt-2 expand-btn" data-filename="${escapeHtml(result.filename)}" data-expanded="false"><i class="bi bi-arrows-expand"></i> 전체 보기</button>`;
+                    resultBody = `
+                        <div class="partial-content">${formattedContent}</div>
+                        <div class="full-content" style="display: none;"></div>
+                        <button class="btn btn-sm btn-outline-primary mt-2 expand-btn" data-filename="${escapeHtml(result.filename)}" data-expanded="false"><i class="bi bi-arrows-expand"></i> 전체 보기</button>
+                    `;
+                } else {
+                    // No filename, just show text
+                    resultBody = `<div class="result-content">${formattedContent}</div>`;
                 }
 
                 const resultCard = `
@@ -306,9 +314,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             <span class="badge bg-secondary">결과 ${index + 1}</span>
                         </div>
                         <div class="card-body">
-                            <div class="partial-content">${formattedContent}</div>
-                            <div class="full-content" style="display: none;"></div>
-                            ${expandButton}
+                            ${resultBody}
                         </div>
                     </div>
                 `;
@@ -386,7 +392,47 @@ document.addEventListener('DOMContentLoaded', async () => {
         return text.replace(/[&<>"]|[']/g, m => map[m]);
     }
 
+    // --- Fetch Page Specific Notice (Toast) ---
+    async function loadPageNotice() {
+        try {
+            const response = await fetch('/api/notice?type=autorag');
+            if (response.ok) {
+                const notices = await response.json();
+                if (Array.isArray(notices) && notices.length > 0) {
+                    const noticeHtml = notices.map(n => n.content).join('<br><br>');
+                    Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false,
+                        showCloseButton: true,
+                        timer: 5000,
+                        timerProgressBar: true,
+                        icon: 'info',
+                        title: '공지사항',
+                        html: noticeHtml,
+                        didOpen: (toast) => {
+                            const closeBtn = toast.querySelector('.swal2-close');
+                            if (closeBtn) closeBtn.style.display = 'none';
+
+                            toast.addEventListener('mouseenter', () => {
+                                Swal.stopTimer();
+                                if (closeBtn) closeBtn.style.display = 'flex';
+                            });
+                            toast.addEventListener('mouseleave', () => {
+                                Swal.resumeTimer();
+                                if (closeBtn) closeBtn.style.display = 'none';
+                            });
+                        }
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('페이지 공지 로드 실패:', error);
+        }
+    }
+
     // Initial Load
     loadCharacterData();
     loadServerStatus();
+    loadPageNotice();
 });

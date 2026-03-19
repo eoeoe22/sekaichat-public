@@ -54,26 +54,18 @@ enabled = true
 head_sampling_rate = 1.0
 
 [vars]
-update_token = "2"
 GEMINI_API_KEY = ""
-TTS_SERVICE_URL = ""
-TTS_SERVICE_URL_FALLBACK = ""
-TTS_API_KEY = ""
-
+GEMINI_MODEL_MAIN = "gemini-3-flash-preview"
+GEMINI_MODEL_LITE = "gemini-3.1-flash-lite-preview"
 TURNSTILE_SITE_KEY = "0x4AAAAAABkrf7cd8w3d1nxe"
 TURNSTILE_SECRET_KEY = ""
-DOMAIN = "sekaich.at"
+DOMAIN = "t"
 JWT_SECRET = ""
-IMAGE_GENERATION_CHARACTERS = "0,3"
 DISCORD_CLIENT_ID = ""
 DISCORD_CLIENT_SECRET = "---"
 DISCORD_REDIRECT_URI = ""
-25FLASH_IMAGE = "true"
 AI_GATEWAY_TOKEN = "-"
 
-IMAGE_GENERATION_PROMPT = """
-이미지 생성 기능 사용법 : 그림을 그려달라는 요청을 받으면, 메시지에 <<여기에 그림에 대한 영어 프롬프트>>형식으로 이미지 생성 명령을 포함합니다. 프롬프트는 반드시 영어로, 구체적이고 상세하게 작성해주세요. 또 특별히 사용자가 스타일을 언급하지 않았다면, 연필 스케치 스타일로 이미지를 생성하세요. 이미지 생성 명령은 외부 시스템에 의해 자동으로 이미지로 변환될것입니다.
-"""
 
 
 WORK_MODE_PROMPT = """

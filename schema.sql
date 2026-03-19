@@ -93,6 +93,17 @@ CREATE TABLE notices (
 )
 
 
+CREATE TABLE user_mcp_servers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    headers TEXT DEFAULT '{}',
+    enabled INTEGER DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+)
+
 CREATE TABLE sekai (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
@@ -100,20 +111,6 @@ CREATE TABLE sekai (
     description TEXT
 )
 
-CREATE TABLE user_character_affection (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    character_id INTEGER NOT NULL,
-    friendship_level INTEGER DEFAULT 50,
-    romantic_level INTEGER DEFAULT 50,
-    character_memory TEXT,
-    last_memory_update TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, affection_level INTEGER DEFAULT 50 CHECK (affection_level >= -100 AND affection_level <= 100), affection_type TEXT DEFAULT 'friendship' NOT NULL CHECK (affection_type IN ('friendship', 'love')),
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (character_id) REFERENCES dating_characters(id),
-    UNIQUE(user_id, character_id)
-)
 
 CREATE TABLE "user_characters" (
     id INTEGER PRIMARY KEY,
@@ -149,3 +146,18 @@ CREATE TABLE users (
     max_auto_call_sequence INTEGER DEFAULT 3,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 , tts_language_preference TEXT DEFAULT 'jp')
+
+-- Indexes
+CREATE INDEX idx_messages_conversation_id ON messages(conversation_id);
+CREATE INDEX idx_messages_conversation_id_created_at ON messages(conversation_id, created_at);
+CREATE INDEX idx_messages_user_id ON messages(user_id);
+
+CREATE INDEX idx_conversations_user_id ON conversations(user_id);
+CREATE INDEX idx_conversations_user_id_created_at ON conversations(user_id, created_at);
+
+CREATE INDEX idx_conversation_participants_conversation_id ON conversation_participants(conversation_id);
+
+CREATE INDEX idx_user_characters_user_id ON user_characters(user_id);
+CREATE INDEX idx_user_characters_user_id_deleted_at ON user_characters(user_id, deleted_at);
+
+CREATE INDEX idx_files_user_id ON files(user_id);

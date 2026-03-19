@@ -1400,44 +1400,6 @@
     font-weight: bold;
   }
 
-  /* TTS 언어 설정 */
-  .tts-language-section {
-    margin-top: 12px;
-    padding: 10px 0;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .tts-language-section .form-label {
-    font-size: 13px;
-    color: var(--text-color);
-    font-weight: 500;
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .tts-language-section .btn-group {
-    width: 100%;
-  }
-
-  .tts-language-section .btn {
-    font-size: 12px;
-    padding: 4px 12px;
-    border-radius: 4px;
-  }
-
-  .tts-language-section .btn:first-child {
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-  }
-
-  .tts-language-section .btn:last-child {
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
-  }
 
   .snackbar {
     visibility: hidden;
@@ -1543,44 +1505,6 @@
     font-weight: bold;
   }
 
-  /* TTS 언어 설정 */
-  .tts-language-section {
-    margin-top: 12px;
-    padding: 10px 0;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .tts-language-section .form-label {
-    font-size: 13px;
-    color: var(--text-color);
-    font-weight: 500;
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .tts-language-section .btn-group {
-    width: 100%;
-  }
-
-  .tts-language-section .btn {
-    font-size: 12px;
-    padding: 4px 12px;
-    border-radius: 4px;
-  }
-
-  .tts-language-section .btn:first-child {
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-  }
-
-  .tts-language-section .btn:last-child {
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
-  }
 
   .snackbar {
     visibility: hidden;

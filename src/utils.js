@@ -256,19 +256,6 @@ export async function callGemini(modelName, apiKey, body, env, context = 'Gemini
       }]
     };
   } catch (error) {
-    console.error(`${context}: SDK 호출 실패 - ${error.message}`);
-
-    // 프록시로 폴백 시도
-    if (env.TTS_SERVICE_URL && env.TTS_API_KEY) {
-      console.log(`${context}: 프록시로 재시도합니다.`);
-      try {
-        return await callGeminiViaProxy(modelName, apiKey, body, env, context);
-      } catch (proxyError) {
-        await logError(proxyError, env, `${context} - Proxy Fallback Failed`);
-        throw proxyError;
-      }
-    }
-
     await logError(error, env, `${context} - SDK Error`);
     throw error;
   }
@@ -298,38 +285,3 @@ export async function callGeminiStream(modelName, apiKey, body, env, context = '
   }
 }
 
-/**
- * 프록시 서버를 통한 Gemini API 호출 (논스트리밍)
- * @param {string} modelName - 호출할 모델 이름
- * @param {string} apiKey - Gemini API 키
- * @param {object} body - API 요청 본문
- * @param {object} env - Worker 환경 변수
- * @param {string} context - 로깅을 위한 컨텍스트 문자열
- * @returns {Promise<object>} - API 응답 데이터
- */
-export async function callGeminiViaProxy(modelName, apiKey, body, env, context = 'Gemini Proxy') {
-  const proxyUrl = env.TTS_SERVICE_URL.replace(/\/tts$/, '/gemini-proxy');
-
-  const proxyResponse = await fetch(proxyUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${env.TTS_API_KEY}`
-    },
-    body: JSON.stringify({
-      gemini_api_key: apiKey,
-      model: modelName,
-      body: body
-    })
-  });
-
-  if (!proxyResponse.ok) {
-    const proxyErrorText = await proxyResponse.text();
-    const proxyError = new Error(`Gemini Proxy API error: ${proxyResponse.status} ${proxyResponse.statusText} - ${proxyErrorText}`);
-    await logError(proxyError, env, `${context} - Proxy Error`);
-    throw proxyError;
-  }
-
-  console.log(`${context}: Gemini 프록시 호출 성공`);
-  return await proxyResponse.json();
-}

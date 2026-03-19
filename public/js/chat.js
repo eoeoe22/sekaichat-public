@@ -9,15 +9,12 @@ let currentWorkMode = false;
 let currentShowTime = true;
 let currentSituationPrompt = '';
 let showMarkdown = true;
-let affectionSystemEnabled = false;
-let autoragMemoryEnabled = false;
+
 let autoReplyModeEnabled = true;
 let continuousResponseEnabled = false; // 기본값은 false (연속응답 비활성화)
 let awaitingUserMessageResponse = false;
 let thinkingLevel = 'MEDIUM';
 let generationAbortController = null;
-
-let isGeneratingTTS = false;
 
 function showSnackbar(message, type = 'info') {
     const iconMap = {
@@ -43,75 +40,6 @@ function showSnackbar(message, type = 'info') {
         icon: iconMap[type] || 'info',
         title: message
     });
-}
-
-// TTS handling function
-async function handleTTS(characterNameCode, messageText, messageId) {
-    if (isGeneratingTTS) {
-        showSnackbar('TTS가 이미 생성 중입니다. 잠시 후 다시 시도해주세요.', 'warning');
-        return;
-    }
-
-    isGeneratingTTS = true;
-    showSnackbar('TTS 생성을 시작합니다...');
-
-    try {
-        const cleanText = stripMarkdown(messageText).replace(/\s+/g, ' ').trim();
-
-        if (!cleanText) {
-            throw new Error('음성으로 변환할 텍스트가 없습니다.');
-        }
-
-        const maxLength = 200;
-        const baseText = cleanText.length > maxLength ?
-            cleanText.substring(0, maxLength) + '...' : cleanText;
-
-        let processedText = await processTextForTTS(baseText);
-
-        const response = await fetch('/api/tts', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                text: processedText,
-                character_name_code: characterNameCode,
-                language: 'japanese'
-            })
-        });
-
-        if (!response.ok) {
-            const error = new Error(await response.text() || 'TTS 생성 실패');
-            error.status = response.status;
-            throw error;
-        }
-
-        const audioBlob = await response.blob();
-        const audioUrl = URL.createObjectURL(audioBlob);
-        const audio = new Audio(audioUrl);
-
-        audio.onerror = () => {
-            URL.revokeObjectURL(audioUrl);
-            showSnackbar('오디오 재생에 실패했습니다.', 'warning');
-        };
-
-        audio.onended = () => {
-            URL.revokeObjectURL(audioUrl);
-        };
-
-        await audio.play();
-        showSnackbar('TTS 생성 완료!', 'success');
-
-    } catch (error) {
-        console.error('TTS 오류:', error);
-        if (error.status === 503) {
-            showSnackbar('현재 TTS를 이용할수 없는 상태입니다', 'error');
-        } else {
-            showSnackbar(error.message, 'warning');
-        }
-    } finally {
-        isGeneratingTTS = false;
-    }
 }
 
 
@@ -561,14 +489,7 @@ function setupEventListeners() {
     const mdToggle = document.getElementById('markdownToggle');
     if (mdToggle) mdToggle.addEventListener('change', e => { showMarkdown = e.target.checked; applyMarkdownMode(); });
 
-    const affectionToggle = document.getElementById('affectionToggle');
-    if (affectionToggle) affectionToggle.addEventListener('change', handleAffectionToggle);
 
-    const affectionBtn = document.getElementById('affectionBtn');
-    if (affectionBtn) affectionBtn.addEventListener('click', showAffectionModal);
-
-    const autoragToggle = document.getElementById('autoragMemoryToggle');
-    if (autoragToggle) autoragToggle.addEventListener('change', handleAutoragMemoryToggle);
 
     document.getElementById('autoReplyToggle').addEventListener('change', handleAutoReplyToggle);
     document.getElementById('continuousResponseToggle').addEventListener('change', handleContinuousResponseToggle);
@@ -749,86 +670,6 @@ async function clearSituationPrompt() {
     await saveSituationPrompt();
 }
 
-// 호감도 시스템 토글
-async function handleAffectionToggle(e) {
-    const useAffectionSys = e.target.checked;
-    if (!currentConversationId) {
-        e.target.checked = false;
-        Swal.fire({ icon: 'warning', text: '먼저 대화를 시작해주세요.' });
-        return;
-    }
-
-    try {
-        const response = await fetch('/api/affection/toggle', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                conversationId: currentConversationId,
-                useAffectionSys
-            })
-        });
-
-        if (response.ok) {
-            affectionSystemEnabled = useAffectionSys;
-            updateAffectionUI();
-            if (useAffectionSys) {
-                addMessage('system', '호감도 시스템이 활성화되었습니다. 대화 내용에 따라 캐릭터의 호감도가 변화합니다.');
-            } else {
-                addMessage('system', '호감도 시스템이 비활성화되었습니다.');
-            }
-        } else {
-            e.target.checked = !useAffectionSys;
-            Swal.fire({
-                icon: 'error',
-                text: '호감도 시스템 설정 변경에 실패했습니다.'
-            });
-        }
-    } catch (error) {
-        console.error('호감도 시스템 토글 실패:', error);
-        e.target.checked = !useAffectionSys;
-        Swal.fire({
-            icon: 'error',
-            text: '호감도 시스템 설정 변경에 실패했습니다.'
-        });
-    }
-}
-
-async function handleAutoragMemoryToggle(e) {
-    const useAutoragMemory = e.target.checked;
-    if (!currentConversationId) {
-        e.target.checked = false;
-        Swal.fire({ icon: 'warning', text: '먼저 대화를 시작해주세요.' });
-        return;
-    }
-
-    try {
-        const response = await fetch('/api/conversations/autorag-memory', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                conversationId: currentConversationId,
-                useAutoragMemory
-            })
-        });
-
-        if (response.ok) {
-            autoragMemoryEnabled = useAutoragMemory;
-            if (useAutoragMemory) {
-                addMessage('system', '스토리 기억 기능이 활성화되었습니다.');
-            } else {
-                addMessage('system', '스토리 기억 기능이 비활성화되었습니다.');
-            }
-        } else {
-            e.target.checked = !useAutoragMemory;
-            alert('스토리 기억 설정 변경에 실패했습니다.');
-        }
-    } catch (error) {
-        console.error('스토리 기억 토글 실패:', error);
-        e.target.checked = !useAutoragMemory;
-        alert('스토리 기억 설정 변경에 실패했습니다.');
-    }
-}
-
 async function handleAutoReplyToggle(e) {
     const isEnabled = e.target.checked;
     autoReplyModeEnabled = isEnabled;
@@ -864,242 +705,8 @@ function handleContinuousResponseToggle(e) {
     continuousResponseEnabled = e.target.checked;
 }
 
-// 호감도 관리 모달 표시
-async function showAffectionModal() {
-    if (!currentConversationId) {
-        Swal.fire({ icon: 'warning', text: '먼저 대화를 시작해주세요.' });
-        return;
-    }
-
-    const modal = new bootstrap.Modal(document.getElementById('affectionModal'));
-    modal.show();
-
-    // 호감도 상태 로드
-    await loadAffectionStatus();
-}
-
-// 호감도 상태 로드
-async function loadAffectionStatus() {
-    try {
-        const response = await fetch(`/api/conversations/${currentConversationId}/affection`);
-        if (response.ok) {
-            const data = await response.json();
-            updateAffectionModal(data);
-        } else {
-            console.error('호감도 상태 로드 실패');
-        }
-    } catch (error) {
-        console.error('호감도 상태 로드 중 오류:', error);
-    }
-}
-
-// 호감도 모달 업데이트 (수정됨)
-function updateAffectionModal(data) {
-    const statusDiv = document.getElementById('affectionSystemStatus');
-    const characterList = document.getElementById('affectionCharacterList');
-
-    if (!data.use_affection_sys) {
-        statusDiv.innerHTML = `<div class=\"alert alert-info\"><i class=\"bi bi-info-circle\"></i> 호감도 시스템이 비활성화되어 있습니다.</div>`;
-        characterList.innerHTML = '';
-        return;
-    }
-
-    statusDiv.innerHTML = `<div class=\"alert alert-success\"><i class=\"bi bi-check-circle\"></i> 호감도 시스템이 활성화되어 있습니다.</div>`;
-
-    if (data.participants.length === 0) {
-        characterList.innerHTML = `<div class=\"text-center py-4 text-muted\"><i class=\"bi bi-person-plus fs-2\"></i><p class=\"mt-2\">대화에 참여한 캐릭터가 없습니다.</p></div>`;
-        return;
-    }
-
-    characterList.innerHTML = '';
-    data.participants.forEach(p => {
-        const level = p.affection_level ?? 0;
-        const type = p.affection_type || 'friendship';
-        const isTypeSelectionDisabled = level < -10;
-
-        const characterDiv = document.createElement('div');
-        characterDiv.className = 'character-affection-item';
-        characterDiv.innerHTML = `
-            <img src="${p.profile_image}" alt="${escapeHtml(p.name)}" class="character-affection-avatar" onerror="this.src='/images/characters/default.webp'">
-            <div class="character-affection-info">
-                <div class="character-affection-name">${escapeHtml(p.name)}</div>
-                <div class="character-affection-level">${getAffectionLevelText(level, type)}</div>
-                <div class="affection-type-group mt-2">
-                    <button class="btn btn-sm ${type === 'friendship' ? 'btn-primary' : 'btn-outline-primary'} ${isTypeSelectionDisabled ? 'disabled' : ''}"
-                            onclick="updateAffectionType(this, 'friendship', ${p.character_id}, '${p.character_type}')">우정</button>
-                    <button class="btn btn-sm ${type === 'love' ? 'btn-danger' : 'btn-outline-danger'} ${isTypeSelectionDisabled ? 'disabled' : ''}"
-                            onclick="updateAffectionType(this, 'love', ${p.character_id}, '${p.character_type}')">애정</button>
-                </div>
-            </div>
-            <div class="affection-controls">
-                <div class="affection-adjust-buttons">
-                    <button class="btn btn-sm btn-outline-secondary" onclick="adjustAffection(${p.character_id}, '${p.character_type}', -5)">-5</button>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="adjustAffection(${p.character_id}, '${p.character_type}', -3)">-3</button>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="adjustAffection(${p.character_id}, '${p.character_type}', -1)">-1</button>
-                </div>
-                <div class="affection-value-container">
-                    <span class="affection-value ${getAffectionClass(level)}" onclick="enableAffectionInput(this, ${p.character_id}, '${p.character_type}')">${level}</span>
-                </div>
-                <div class="affection-adjust-buttons">
-                    <button class="btn btn-sm btn-outline-secondary" onclick="adjustAffection(${p.character_id}, '${p.character_type}', 1)">+1</button>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="adjustAffection(${p.character_id}, '${p.character_type}', 3)">+3</button>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="adjustAffection(${p.character_id}, '${p.character_type}', 5)">+5</button>
-                </div>
-            </div>
-        `;
-        characterList.appendChild(characterDiv);
-    });
-}
-
-// 호감도 수준 텍스트 반환 (수정됨)
-function getAffectionLevelText(level, type) {
-    // 음수 범위 - 3단계
-    if (level < -50) return '최악';
-    if (level < -20) return '부정적';
-    if (level < -10) return '약간 부정적';
-
-    // 중립 범위 (-10 ~ +10)
-    if (level >= -10 && level <= 10) return '중립';
-
-    // 양수 범위 - 3단계 (우정/애정 분리 유지)
-    if (level < 30) return type === 'love' ? '약간 호감 (애정)' : '약간 긍정 (우정)';
-    if (level < 70) return type === 'love' ? '긍정적 (애정)' : '긍정적 (우정)';
-    return type === 'love' ? '매우 긍정 (애정)' : '매우 긍정 (우정)';
-}
-
-// 호감도 수준 CSS 클래스 반환 (수정됨)
-function getAffectionClass(level) {
-    if (level < -10) return 'affection-hostile';
-    if (level >= -10 && level <= 10) return 'affection-neutral';
-    if (level < 70) return 'affection-positive';
-    return 'affection-loving';
-}
-
-// 호감도 버튼으로 조절
-async function adjustAffection(characterId, characterType, amount) {
-    const characterItem = document.querySelector(`[onclick*=\"adjustAffection(${characterId}, '${characterType}'\"]`).closest('.character-affection-item');
-    const valueSpan = characterItem.querySelector('.affection-value');
-    let currentValue = parseInt(valueSpan.textContent);
-    let newValue = currentValue + amount;
-
-    // 값 범위 제한
-    newValue = Math.max(-100, Math.min(100, newValue));
-
-    await updateAffectionLevel(characterId, characterType, newValue);
-}
-
-function enableAffectionInput(span, characterId, characterType) {
-    const currentValue = span.textContent;
-    const input = document.createElement('input');
-    input.type = 'number';
-    input.className = 'affection-input form-control';
-    input.value = currentValue;
-    input.min = -100;
-    input.max = 100;
-
-    span.style.display = 'none';
-    span.parentNode.insertBefore(input, span.nextSibling);
-    input.focus();
-
-    const save = async () => {
-        let newValue = parseInt(input.value);
-        if (isNaN(newValue)) {
-            newValue = currentValue;
-        }
-        newValue = Math.max(-100, Math.min(100, newValue));
-
-        input.remove();
-        span.style.display = '';
-
-        await updateAffectionLevel(characterId, characterType, newValue);
-    };
-
-    input.addEventListener('blur', save);
-    input.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            save();
-        }
-    });
-}
-
-// 호감도 수준 변경 (수정됨)
-async function updateAffectionLevel(characterId, characterType, affectionLevel) {
-    try {
-        const response = await fetch('/api/affection/adjust', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ conversationId: currentConversationId, characterId, characterType, affectionLevel })
-        });
-        if (!response.ok) {
-            const errorData = await response.json();
-            Swal.fire({ icon: 'error', text: `호감도 조절 실패: ${errorData.error}` });
-            await loadAffectionStatus();
-            return;
-        }
-
-        // 성공 후 상태 다시 로드 (서버 값으로 최종 동기화)
-        await loadAffectionStatus();
-    } catch (error) {
-        console.error('호감도 업데이트 실패:', error);
-        Swal.fire({ icon: 'error', text: '호감도 업데이트 중 오류가 발생했습니다.' });
-        await loadAffectionStatus(); // 실패 시 원래 값으로 복원
-    }
-}
-
-// 호감도 타입 변경 (신규)
-async function updateAffectionType(button, type, characterId, characterType) {
-    if (button.classList.contains('disabled')) return;
-
-    try {
-        const response = await fetch('/api/affection/type', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ conversationId: currentConversationId, characterId, characterType, affectionType: type })
-        });
-        if (!response.ok) throw new Error('타입 변경 실패');
-
-        // 성공 후 상태 다시 로드
-        await loadAffectionStatus();
-    } catch (error) {
-        console.error('호감도 타입 변경 실패:', error);
-        await loadAffectionStatus();
-    }
-}
 
 
-// 호감도 UI 업데이트
-function updateAffectionUI() {
-    const affectionBtn = document.getElementById('affectionBtn');
-    if (affectionBtn) {
-        if (affectionSystemEnabled) {
-            affectionBtn.style.opacity = '1';
-            affectionBtn.disabled = false;
-        } else {
-            affectionBtn.style.opacity = '0.5';
-            affectionBtn.disabled = true;
-        }
-    }
-}
-
-// 호감도 시스템 상태 로드 (대화 로드 시 호출)
-async function loadAffectionSystemState() {
-    if (!currentConversationId) return;
-
-    try {
-        const response = await fetch(`/api/conversations/${currentConversationId}/affection`);
-        if (response.ok) {
-            const data = await response.json();
-            affectionSystemEnabled = !!data.use_affection_sys;
-            document.getElementById('affectionToggle').checked = affectionSystemEnabled;
-            updateAffectionUI();
-        }
-    } catch (error) {
-        console.error('호감도 시스템 상태 로드 실패:', error);
-        affectionSystemEnabled = false;
-        document.getElementById('affectionToggle').checked = false;
-        updateAffectionUI();
-    }
-}
 
 // 작업 모드 UI
 function updateWorkModeUI(isWorkMode) {
@@ -1187,14 +794,12 @@ async function loadConversation(id) {
             let showTimeValue = 1;
             let situationPrompt = '';
             let autoReplyMode = 0;
-            let autoragMemory = 0;
             if (conversationData.messages) {
                 messages = conversationData.messages;
                 workModeValue = conversationData.work_mode || 0;
                 showTimeValue = conversationData.show_time_info !== undefined ? conversationData.show_time_info : 1;
                 situationPrompt = conversationData.situation_prompt || '';
                 autoReplyMode = conversationData.auto_reply_mode_enabled || 0;
-                autoragMemory = conversationData.use_autorag_memory || 0;
             } else if (Array.isArray(conversationData)) {
                 messages = conversationData;
             }
@@ -1202,7 +807,6 @@ async function loadConversation(id) {
             currentShowTime = !!showTimeValue;
             currentSituationPrompt = situationPrompt;
             autoReplyModeEnabled = !!autoReplyMode;
-            autoragMemoryEnabled = !!autoragMemory;
             document.getElementById('workModeToggle').checked = currentWorkMode;
             document.getElementById('showTimeToggle').checked = currentShowTime;
             document.getElementById('autoReplyToggle').checked = autoReplyModeEnabled;
@@ -1215,8 +819,7 @@ async function loadConversation(id) {
                 continuousContainer.style.display = 'none';
             }
 
-            const autoragToggle = document.getElementById('autoragMemoryToggle');
-            if (autoragToggle) autoragToggle.checked = autoragMemoryEnabled;
+
             updateWorkModeUI(currentWorkMode);
             const messagesDiv = document.getElementById('chatMessages');
             messagesDiv.innerHTML = '';
@@ -1240,8 +843,7 @@ async function loadConversation(id) {
             document.getElementById('conversationTitle').textContent = conversationTitle;
             if (window.loadConversations) await window.loadConversations();
             applyMarkdownMode();
-            // 호감도 시스템 상태 로드
-            await loadAffectionSystemState();
+
             updateStartConversationPanel(); // [추가]
         } else if (response.status === 401) {
             window.location.href = '/login';
@@ -1449,11 +1051,10 @@ async function generateCharacterResponse(characterId) {
                                         const actionsDiv = messageEl.querySelector('.message-actions');
                                         if (actionsDiv) {
                                             const characterName = messageEl.querySelector('.message-avatar')?.alt || character?.name;
-                                            const ttsBtn = createTTSButton(characterName, fullText, messageId);
                                             const delBtn = `<button class="message-delete-btn" onclick="deleteMessage(${messageId}, this.closest('.message'))" title="메시지 삭제">
                                                 <i class="bi bi-trash-fill"></i>
                                             </button>`;
-                                            actionsDiv.innerHTML = ttsBtn + delBtn;
+                                            actionsDiv.innerHTML = delBtn;
                                         }
                                     }
                                 }
@@ -1503,11 +1104,10 @@ async function generateCharacterResponse(characterId) {
                         const actionsDiv = messageEl.querySelector('.message-actions');
                         if (actionsDiv) {
                             const characterName = messageEl.querySelector('.message-avatar')?.alt || character?.name;
-                            const ttsBtn = createTTSButton(characterName, data.newMessage?.content || data.response, messageId);
                             const delBtn = `<button class="message-delete-btn" onclick="deleteMessage(${messageId}, this.closest('.message'))" title="메시지 삭제">
                                 <i class="bi bi-trash-fill"></i>
                             </button>`;
-                            actionsDiv.innerHTML = ttsBtn + delBtn;
+                            actionsDiv.innerHTML = delBtn;
                         }
                     }
                 }
@@ -1905,13 +1505,9 @@ async function startNewConversation() {
             currentWorkMode = false;
             currentShowTime = true;
             currentSituationPrompt = '';
-            affectionSystemEnabled = false;
             document.getElementById('workModeToggle').checked = false;
             document.getElementById('showTimeToggle').checked = true;
-            const affectionToggle = document.getElementById('affectionToggle');
-            if (affectionToggle) affectionToggle.checked = false;
             updateWorkModeUI(false);
-            updateAffectionUI();
             document.getElementById('chatMessages').innerHTML = '';
             document.getElementById('conversationTitle').textContent = '세카이 채팅';
             updateInvitedCharactersUI();
@@ -2539,44 +2135,6 @@ function parseCustomEmoji(content) {
     return { text: content, emoji: null };
 }
 
-// TTS support helper function
-function getCharacterTTSInfo(characterName) {
-    if (!characterName) return null;
-
-    // Find character in available characters list
-    const character = availableCharacters.find(char =>
-        char.name === characterName &&
-        char.sekai === '프로젝트 세카이' &&
-        char.name_code
-    );
-
-    return character ? { name_code: character.name_code } : null;
-}
-
-// TTS button generation helper
-function createTTSButton(characterName, messageText, messageId) {
-    const ttsInfo = getCharacterTTSInfo(characterName);
-    if (!ttsInfo) return '';
-
-    // Safely escape text for onclick handler - properly escape for JavaScript strings in HTML attributes
-    function escapeForJSString(text) {
-        return text
-            .replace(/\\/g, '\\\\')  // Escape backslashes first
-            .replace(/'/g, "\\'")    // Escape single quotes
-            .replace(/"/g, '\\"')    // Escape double quotes
-            .replace(/\n/g, '\\n')   // Escape newlines
-            .replace(/\r/g, '\\r')   // Escape carriage returns
-            .replace(/\t/g, '\\t');  // Escape tabs
-    }
-
-    const escapedNameCode = escapeForJSString(ttsInfo.name_code);
-    const escapedText = escapeForJSString(messageText);
-
-    return `<button class="tts-button btn btn-sm btn-outline-primary" onclick="handleTTS('${escapedNameCode}', '${escapedText}', ${messageId || 'null'})" title="음성으로 듣기">
-        <i class="bi bi-soundwave"></i>
-    </button>`;
-}
-
 // 이미지 로딩 플레이스홀더 추가
 function addImageLoadingPlaceholder(characterName, characterImage) {
     const messagesDiv = document.getElementById('chatMessages');
@@ -2657,7 +2215,6 @@ function addMessage(role, content, characterName = null, characterImage = null, 
                     <div class="message-actions"></div>
                 </div>`;
         } else {
-            const ttsButtonHtml = createTTSButton(characterName, rawForMarkdown, messageId);
             messageDiv.innerHTML = `
                 <img src="${avatarSrc}" alt="${escapeHtml(altText)}" class="message-avatar" onerror="this.src='/images/characters/kanade.webp'">
                 <div class="message-content">
@@ -2666,7 +2223,6 @@ function addMessage(role, content, characterName = null, characterImage = null, 
                     </div>
                     ${emoji ? createCustomEmojiHTML(emoji) : ''}
                     <div class="message-actions">
-                        ${ttsButtonHtml}
                         ${deleteButtonHtml}
                     </div>
                 </div>`;
@@ -2782,38 +2338,6 @@ function showErrorModal(message) {
     errorModal.show();
 }
 
-// TTS 텍스트 처리 함수 (사용자 언어 설정에 따라 번역 또는 원본 사용)
-async function processTextForTTS(text) {
-    try {
-        const response = await fetch('/api/tts/translate', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                text: text,
-                target: 'japanese'  // 이 파라미터는 이제 백엔드에서 무시되고 사용자 설정을 따름
-            })
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            // 새로운 로직: 번역 실패시 원본 텍스트로 폴백하지 않고 오류 발생
-            throw new Error(`텍스트 처리 실패: ${response.status} ${response.statusText} - ${errorText}`);
-        }
-
-        const result = await response.json();
-        if (!result.translatedText) {
-            throw new Error('처리된 텍스트를 받을 수 없습니다.');
-        }
-
-        return result.translatedText;
-    } catch (error) {
-        console.error('TTS 텍스트 처리 중 오류 발생:', error);
-        throw error; // 오류를 다시 던져서 TTS 실패 처리
-    }
-}
-
 // Image expand and download functions
 function expandImage(imageUrl, fileName) {
     // Create modal for expanded image view
@@ -2879,10 +2403,6 @@ window.handleEmojiLoadError = handleEmojiLoadError;
 window.deleteMessage = deleteMessage;
 window.updateInvitedCharactersUI = updateInvitedCharactersUI;
 window.inviteCharacter = inviteCharacter;
-window.updateAffectionLevel = updateAffectionLevel;
-window.adjustAffection = adjustAffection;
-window.updateAffectionType = updateAffectionType;
+
 window.expandImage = expandImage;
 window.downloadImage = downloadImage;
-
-window.handleTTS = handleTTS;

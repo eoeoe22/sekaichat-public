@@ -1,4 +1,4 @@
-import { logError, getUserFromRequest, callGemini, callGeminiStream, callGeminiViaProxy } from './utils.js';
+import { logError, getUserFromRequest, callGemini, callGeminiStream } from './utils.js';
 import { getExtendedCharacterPrompt } from './user-characters.js';
 import { updateConversationTitle } from './conversations.js';
 
@@ -96,7 +96,7 @@ export async function handleCharacterGeneration(request, env) {
   let characterId, conversationId, imageData, workMode, showTime, situationPrompt;
   let autoCallCount, thinkingLevel, isContinuous;
   let user, participant, history, characterPrompt, maxAutoCallSequence, participants;
-  let commonRulesPrompt, currentTime, latestImages, apiKey, autoragContext;
+  let commonRulesPrompt, currentTime, latestImages, apiKey;
 
   try {
     const requestBody = await request.json();
@@ -137,8 +137,6 @@ export async function handleCharacterGeneration(request, env) {
 
     maxAutoCallSequence = user.max_auto_call_sequence || 3;
     participants = await getConversationParticipants(conversationId, env);
-    autoragContext = await getAutoragMemoryContext(conversationId, user, env);
-
     commonRulesPrompt = '';
     if (characterId !== 0) {
       if (workMode) {
@@ -168,64 +166,35 @@ export async function handleCharacterGeneration(request, env) {
           characterPrompt, commonRulesPrompt, history, user.nickname, user.self_introduction,
           currentTime, latestImages, autoCallCount || 0, maxAutoCallSequence,
           participants, situationPrompt, characterId, participant.character_type,
-          env, autoragContext, thinkingLevel || 'MEDIUM',
+          env, thinkingLevel || 'MEDIUM',
           isContinuous
         );
 
         let fullText = '';
-        let usedFallback = false;
 
         try {
-          // 1차 시도: SDK 스트리밍
-          const streamResult = await callGeminiStream('gemini-3-flash-preview', apiKey, body, env, 'Character Generation Stream');
+          const streamResult = await callGeminiStream(env.GEMINI_MODEL_MAIN, apiKey, body, env, 'Character Generation Stream');
 
           try {
             for await (const chunk of streamResult.stream) {
               try {
-
-
                 const text = chunk.text();
                 if (text) {
                   fullText += text;
-                  // SSE 포맷으로 전송
                   controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text, type: 'chunk' })}\n\n`));
                 }
               } catch (chunkError) {
                 console.error('청크 처리 중 오류:', chunkError.message);
-                // 특정 청크 오류 시에도 수집된 텍스트가 있으면 계속 진행하거나 안전하게 종료 시도
               }
             }
           } catch (innerStreamError) {
             console.error('스트림 반복 중 오류:', innerStreamError.message);
-            // 이미 데이터를 보냈다면 여기서 중단하고 수집된 데이터라도 처리하도록 함
           }
         } catch (streamError) {
-          console.error('스트리밍 실패, 프록시로 폴백:', streamError.message);
-
-          // 2차 시도: 프록시 폴백 (논스트리밍)
-          try {
-            const fallbackResult = await callGeminiViaProxy('gemini-3-flash-preview', apiKey, body, env, 'Character Generation Fallback');
-            if (fallbackResult.candidates && fallbackResult.candidates[0]?.content?.parts) {
-              const parts = fallbackResult.candidates[0].content.parts;
-
-              for (const part of parts) {
-                if (part.text) {
-                  fullText += part.text;
-                }
-              }
-
-              usedFallback = true;
-              // 프록시 결과는 한번에 전송
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: fullText, type: 'fallback' })}\n\n`));
-            } else {
-              throw new Error('프록시 응답이 비어있습니다.');
-            }
-          } catch (proxyError) {
-            await logError(proxyError, env, 'Character Generation - Proxy Fallback');
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: '응답 생성에 실패했습니다.', type: 'error' })}\n\n`));
-            controller.close();
-            return;
-          }
+          await logError(streamError, env, 'Character Generation - Stream Error');
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: '응답 생성에 실패했습니다.', type: 'error' })}\n\n`));
+          controller.close();
+          return;
         }
 
         // 응답 파싱 및 캐릭터 호출
@@ -239,8 +208,7 @@ export async function handleCharacterGeneration(request, env) {
           type: 'done',
           messageId: newMessage.id,
           content: finalContent,
-          calledCharacter,
-          usedFallback
+          calledCharacter
         })}\n\n`));
 
       } catch (error) {
@@ -315,7 +283,7 @@ export async function handleAutoReply(request, env) {
         };
 
         try {
-          const nextSpeakerData = await callGemini('gemini-2.5-flash-lite', apiKey, body, env, 'Auto-Reply Speaker Selection');
+          const nextSpeakerData = await callGemini(env.GEMINI_MODEL_LITE, apiKey, body, env, 'Auto-Reply Speaker Selection');
           nextSpeakerName = nextSpeakerData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
         } catch (error) {
           await logError(error, env, 'Auto-Reply Speaker Selection');
@@ -382,7 +350,7 @@ function buildGeminiRequestBody(
   characterPrompt, commonRulesPrompt, history, userNickname, userSelfIntro,
   currentTime, imageDataArray, autoCallSequence, maxAutoCallSequence,
   participants, situationPrompt, currentCharacterId, currentCharacterType,
-  env, autoragContext, thinkingLevel = 'MEDIUM',
+  env, thinkingLevel = 'MEDIUM',
   isContinuous = false
 ) {
   let systemPrompt = characterPrompt;
@@ -421,9 +389,7 @@ function buildGeminiRequestBody(
     systemPrompt += `\n\n[상황 설정]\n${situationPrompt.trim()}`;
   }
 
-  if (autoragContext) {
-    systemPrompt += `\n\n[스토리 기억]\n다음은 관련된 스토리 맥락입니다. 이 정보를 참고하여 답변에 활용해주세요:\n\n${autoragContext}`;
-  }
+
 
 
 
@@ -477,181 +443,6 @@ function buildGeminiRequestBody(
 }
 
 
-// 🔧 AutoRAG 메모리 컨텍스트 조회
-async function getAutoragMemoryContext(conversationId, user, env) {
-  try {
-    // AutoRAG 메모리 설정이 활성화되어 있는지 확인
-    const conversation = await env.DB.prepare(
-      'SELECT use_autorag_memory FROM conversations WHERE id = ?'
-    ).bind(conversationId).first();
-
-    if (!conversation || !conversation.use_autorag_memory) {
-      return null;
-    }
-
-    // 최근 5개 메시지 조회
-    const recentMessages = await getRecentMessages(conversationId, 5, env);
-    if (recentMessages.length === 0) {
-      return null;
-    }
-
-    // 최근 메시지들을 쿼리 텍스트로 결합
-    const conversationText = recentMessages
-      .map(msg => `${msg.character_name || msg.role}: ${msg.content}`)
-      .join('\n');
-
-    if (!conversationText.trim()) {
-      return null;
-    }
-
-    const apiKey = user?.gemini_api_key || env.GEMINI_API_KEY;
-    const keywordPrompt = `다음 대화 내역에서 핵심 키워드를 쉼표로 구분해 나열하세요. (현재 대화중인 주제의 키워드만 나열하며, 대화가 다른 주제로 넘어갔다면 그 이전 대화의 키워드는 무시합니다):\n\n${conversationText}`;
-
-    const body = {
-      contents: [{ role: 'user', parts: [{ text: keywordPrompt }] }],
-      generationConfig: { temperature: 0.0, maxOutputTokens: 100 }
-    };
-
-    let keywords = conversationText.trim(); // Fallback to original text
-    try {
-      const keywordData = await callGemini('gemini-2.5-flash-lite', apiKey, body, env, 'AutoRAG Keyword Extraction');
-      const extractedKeywords = keywordData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-      if (extractedKeywords) {
-        keywords = extractedKeywords;
-      }
-    } catch (error) {
-      await logError(error, env, 'AutoRAG Keyword Extraction');
-    }
-
-    // Cloudflare AutoRAG로 검색
-    try {
-      const answer = await env.AI.autorag("sekai").search({
-        query: keywords, // Use extracted keywords
-      });
-
-      if (answer && answer.length > 0) {
-        // Enhanced extraction to preserve filename metadata
-        const extractedResults = extractAutoragResultsForChat(answer, env);
-
-        // Format results with filename information when available
-        const formattedResults = extractedResults.map(result => {
-          let resultText = result.text;
-
-          // Add filename information if available
-          if (result.filename) {
-            resultText = `📁 ${result.filename}\n${result.text}`;
-          } else if (result.source && !result.source.startsWith('검색 결과') && !result.source.startsWith('문서')) {
-            resultText = `📋 ${result.source}\n${result.text}`;
-          }
-
-          return resultText;
-        });
-
-        return formattedResults.join('\n\n');
-      }
-    } catch (autoragError) {
-      await logError(autoragError, env, 'AutoRAG Search');
-      // AutoRAG 실패 시 null 반환 (대화는 계속 진행)
-    }
-
-    return null;
-  } catch (error) {
-    await logError(error, env, 'Get AutoRAG Memory Context');
-    return null;
-  }
-}
-
-// Enhanced autorag results extraction for chat context (simplified version for gemini.js)
-function extractAutoragResultsForChat(results) {
-  if (!results) {
-    return [];
-  }
-
-  let extractedResults = [];
-
-  // Case 1: Results is a simple array of strings
-  if (Array.isArray(results) && results.every(item => typeof item === 'string')) {
-    extractedResults = results.map((result, index) => ({
-      source: `검색 결과 ${index + 1}`,
-      text: result,
-      filename: null
-    }));
-  }
-  // Case 2: Results is an object with array property
-  else {
-    const potentialResultKeys = ['results', 'data', 'documents', 'passages'];
-    let found = false;
-
-    for (const key of potentialResultKeys) {
-      if (results[key] && Array.isArray(results[key])) {
-        extractedResults = results[key].map((result, index) => {
-          if (typeof result === 'string') {
-            return { source: `검색 결과 ${index + 1}`, text: result, filename: null };
-          }
-          if (typeof result === 'object' && result !== null) {
-            // Extract filename from various possible metadata locations
-            let filename = result.filename ||
-              result.metadata?.filename ||
-              result.metadata?.file ||
-              result.metadata?.source_file ||
-              result.source_metadata?.filename ||
-              result.document_metadata?.filename;
-
-            let source = filename ||
-              result.source ||
-              result.metadata?.source ||
-              `검색 결과 ${index + 1}`;
-
-            return {
-              source: source,
-              text: result.text || result.content || result.passage || JSON.stringify(result),
-              filename: filename
-            };
-          }
-          return { source: `검색 결과 ${index + 1}`, text: String(result), filename: null };
-        });
-        found = true;
-        break;
-      }
-    }
-
-    if (!found) {
-      // Case 3: Results is a single object with text/content
-      if (typeof results === 'object' && (results.text || results.content)) {
-        let filename = results.filename ||
-          results.metadata?.filename ||
-          results.metadata?.file ||
-          results.metadata?.source_file ||
-          results.source_metadata?.filename ||
-          results.document_metadata?.filename;
-
-        extractedResults = [{
-          source: filename || results.source || '검색 결과',
-          text: results.text || results.content,
-          filename: filename
-        }];
-      }
-      // Case 4: Results is a single string
-      else if (typeof results === 'string') {
-        extractedResults = [{
-          source: '검색 결과',
-          text: results,
-          filename: null
-        }];
-      }
-      // Fallback: Unknown structure
-      else {
-        extractedResults = [{
-          source: '알 수 없는 형식의 결과',
-          text: JSON.stringify(results, null, 2),
-          filename: null
-        }];
-      }
-    }
-  }
-
-  return extractedResults;
-}
 
 
 function parseCharacterCall(content) {
@@ -820,7 +611,7 @@ function uint8ArrayToBinaryString(uint8Array) {
   return binaryString;
 }
 
-async function getLatestImagesFromHistory(conversationId, env, limit = 2) {
+async function getLatestImagesFromHistory(conversationId, env, limit = 1) {
   try {
     const { results } = await env.DB.prepare(
       `SELECT f.filename, f.mime_type, f.r2_key FROM messages m
@@ -945,7 +736,7 @@ export async function handleSelectSpeaker(request, env) {
 
     let nextSpeakerName = null;
     try {
-      const nextSpeakerData = await callGemini('gemini-3-flash-preview', apiKey, body, env, 'Select Speaker');
+      const nextSpeakerData = await callGemini(env.GEMINI_MODEL_MAIN, apiKey, body, env, 'Select Speaker');
       nextSpeakerName = nextSpeakerData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
     } catch (error) {
       await logError(error, env, 'handleSelectSpeaker');

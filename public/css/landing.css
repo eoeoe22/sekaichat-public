@@ -344,16 +344,6 @@ body {
     filter: drop-shadow(0 4px 8px var(--glow-color));
 }
 
-/* GPU Image in TTS Feature Card */
-.feature-card img[alt="GPU"] {
-    max-width: 200px;
-    max-height: 150px;
-    width: auto;
-    height: auto;
-    object-fit: contain;
-    margin: 1rem 0;
-}
-
 /* Feature Cards Carousel Styles */
 .feature-carousel-container {
     position: relative;

@@ -149,16 +149,6 @@ export async function handleUserUpdate(request, env) {
                 ).bind(user.id).run();
                 break;
 
-            case 'tts_language_preference':
-                const { tts_language_preference } = data;
-                if (!['kr', 'jp'].includes(tts_language_preference)) {
-                    return new Response('잘못된 TTS 언어 설정입니다', { status: 400 });
-                }
-                await env.DB.prepare(
-                    'UPDATE users SET tts_language_preference = ? WHERE id = ?'
-                ).bind(tts_language_preference, user.id).run();
-                break;
-
             default:
                 return new Response('지원하지 않는 업데이트 유형입니다', { status: 400 });
         }

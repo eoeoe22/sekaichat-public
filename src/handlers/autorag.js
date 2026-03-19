@@ -212,7 +212,7 @@ ${query}`;
             }
 
             try {
-                const keywordResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent`, {
+                const keywordResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${env.GEMINI_MODEL_LITE}:generateContent`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

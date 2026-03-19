@@ -205,104 +205,6 @@
             }
         }
 
-        /* 호감도 시스템 스타일 */
-        .character-affection-list {
-            max-height: 400px;
-            overflow-y: auto;
-        }
-
-        .character-affection-item {
-            display: flex;
-            align-items: center;
-            padding: 15px;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            margin-bottom: 10px;
-            background: var(--bg-color);
-        }
-
-        .character-affection-avatar {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            object-fit: cover;
-            margin-right: 15px;
-        }
-
-        .character-affection-info {
-            flex: 1;
-            margin-right: 15px;
-        }
-
-        .character-affection-name {
-            font-weight: 600;
-            margin-bottom: 5px;
-        }
-
-        .character-affection-level {
-            font-size: 0.9em;
-            color: var(--text-muted);
-        }
-
-        .affection-controls {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            min-width: 300px;
-            justify-content: space-between;
-        }
-
-        .affection-adjust-buttons {
-            display: flex;
-            gap: 5px;
-        }
-
-        .affection-value-container {
-            flex-grow: 1;
-            text-align: center;
-        }
-
-        .affection-input {
-            width: 80px;
-            text-align: center;
-            margin: 0 auto;
-        }
-
-        .affection-value {
-            font-weight: 600;
-            min-width: 60px;
-            text-align: center;
-            padding: 8px 12px;
-            border-radius: 8px;
-            font-size: 1.1em;
-            cursor: pointer;
-            display: inline-block;
-        }
-
-        .affection-hostile {
-            background-color: #dc3545;
-            color: white;
-        }
-
-        .affection-cautious {
-            background-color: #fd7e14;
-            color: white;
-        }
-
-        .affection-neutral {
-            background-color: #6c757d;
-            color: white;
-        }
-
-        .affection-positive {
-            background-color: #198754;
-            color: white;
-        }
-
-        .affection-loving {
-            background-color: #0d6efd;
-            color: white;
-        }
 
         /* 추가: 대화내역 불러오기 모달 관련 스타일 */
         .conversation-modal-list {
@@ -676,26 +578,7 @@
                                 </label>
                             </div>
 
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="autoragMemoryToggle">
-                                <label class="form-check-label" for="autoragMemoryToggle">
-                                    <button type="button" class="work-mode-info-btn" data-bs-toggle="modal"
-                                        data-bs-target="#autoragMemoryInfoModal" title="스토리 기억 기능 안내">
-                                        <i class="bi bi-info-circle"></i>
-                                    </button>
-                                    스토리 기억 <i class="bi bi-archive"></i>
-                                </label>
-                            </div>
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="affectionToggle">
-                                <label class="form-check-label" for="affectionToggle">
-                                    <button type="button" class="work-mode-info-btn" data-bs-toggle="modal"
-                                        data-bs-target="#affectionInfoModal" title="호감도 시스템 안내">
-                                        <i class="bi bi-info-circle"></i>
-                                    </button>
-                                    호감도 시스템 <i class="bi bi-heart"></i>
-                                </label>
-                            </div>
+
                             <div class="form-check form-switch">
                                 <input class="form-check-input" type="checkbox" id="autoReplyToggle" checked>
                                 <label class="form-check-label" for="autoReplyToggle">
@@ -715,12 +598,6 @@
                     <div class="situation-prompt-section">
                         <button id="situationPromptBtn" class="btn btn-outline-secondary btn-sm">
                             <i class="bi bi-card-text"></i> 상황 설정
-                        </button>
-                        <button id="knowledgeBtn" class="btn btn-outline-secondary btn-sm">
-                            <i class="bi bi-database"></i> 지식
-                        </button>
-                        <button id="affectionBtn" class="btn btn-outline-secondary btn-sm">
-                            <i class="bi bi-heart-fill"></i> 호감도 조절
                         </button>
                     </div>
                 </div>
@@ -1079,33 +956,7 @@
         </div>
     </div>
 
-    <div class="modal fade" id="knowledgeModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-database"></i> 지식 베이스 관리</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <h6><i class="bi bi-list-ul"></i> 전체 지식 목록</h6>
-                            </div>
-                            <div id="knowledgeList" class="knowledge-list"></div>
-                        </div>
-                        <div class="col-md-6">
-                            <h6><i class="bi bi-check2-square"></i> 현재 대화에 적용된 지식</h6>
-                            <div id="appliedKnowledgeList" class="applied-knowledge-list"></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
-                </div>
-            </div>
-        </div>
-    </div>
+
 
     <div class="modal fade" id="uploadModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-sm">
@@ -1239,89 +1090,7 @@
         </div>
     </div>
 
-    <div class="modal fade" id="autoragMemoryInfoModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-archive"></i> 스토리 기억 기능 안내</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
-                </div>
-                <div class="modal-body">
-                    <p><strong>AutoRAG 스토리 기억 기능:</strong></p>
-                    <ul>
-                        <li>대화와 관련된 공식 스토리 맥락을 제공합니다</li>
-                        <li>캐릭터가 공식 스토리를 기억하게 됩니다.</li>
-                        <li>Cloudflare AutoRAG를 사용하여 데이터베이스와 별개로 스토리 데이터를 검색합니다</li>
-                    </ul>
-                    <p><strong>사용 방법:</strong></p>
-                    <ol>
-                        <li>스토리 기억 토글을 활성화하세요</li>
-                        <li>공식 스토리 데이터베이스에서 관련성이 높은 부분을 자동으로 캐릭터가 참고합니다</li>
-                    </ol>
-                    <div class="alert alert-info mt-3">
-                        <i class="bi bi-lightbulb"></i>
-                        <strong>참고사항:</strong> 이 기능은 최근 5개 메시지를 기반으로 스토리를 검색합니다.
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-primary" data-bs-dismiss="modal">확인</button>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <div class="modal fade" id="affectionInfoModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-heart-fill"></i> 호감도 시스템 안내</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
-                </div>
-                <div class="modal-body">
-                    <p><strong>호감도 시스템:</strong></p>
-                    <ul>
-                        <li>대화 내용에 따라 캐릭터의 호감도가 자동으로 변화합니다.</li>
-                        <li>호감도 범위: -100 ~ +100 (기본값: 0)</li>
-                        <li>호감 상태: 우정, 애정 (호감도가 0 이상일 때만 선택 가능)</li>
-                        <li>호감도와 호감 상태에 따라 캐릭터의 대화 스타일이 변화합니다.</li>
-                        <li>수동으로 호감도를 조절할 수도 있습니다.</li>
-                    </ul>
-                    <p><strong>호감도 범위별 행동:</strong></p>
-                    <ul>
-                        <li><span class="badge bg-danger">-100 ~ -51</span>: 적대적</li>
-                        <li><span class="badge bg-warning">-50 ~ -1</span>: 부정적</li>
-                        <li><span class="badge bg-secondary">0 ~ 49</span>: 중립/친구</li>
-                        <li><span class="badge bg-success">50 ~ 100</span>: 긍정적/애정</li>
-                    </ul>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">확인</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal fade" id="affectionModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-heart-fill"></i> 호감도 관리</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div id="affectionSystemStatus" class="mb-3">
-                        <!-- 상태 메시지 -->
-                    </div>
-                    <div id="affectionCharacterList" class="character-affection-list">
-                        <!-- 캐릭터 목록이 여기에 동적으로 생성됩니다 -->
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- ===== 에러 표시용 모달 ===== -->
     <div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
@@ -1377,7 +1146,7 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="/js/sidebar.js"></script>
     <script src="/js/user-characters.js"></script>
-    <script src="/js/knowledge-base.js"></script>
+
     <script src="/js/chat.js"></script>
     <!-- [추가] 대화내역 불러오기 모달 기능 스크립트 -->
     <script>

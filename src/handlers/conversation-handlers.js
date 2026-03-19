@@ -71,7 +71,7 @@ export async function getConversationMessages(request, env, conversationId) {
     try {
         const { error, conversation } = await requireConversationOwner(
             request, env, conversationId,
-            'work_mode, show_time_info, situation_prompt, auto_reply_mode_enabled, use_autorag_memory'
+            'work_mode, show_time_info, situation_prompt, auto_reply_mode_enabled'
         );
         if (error) return error;
 
@@ -96,8 +96,7 @@ export async function getConversationMessages(request, env, conversationId) {
             work_mode: conversation.work_mode,
             show_time_info: conversation.show_time_info !== undefined ? conversation.show_time_info : 1,
             situation_prompt: conversation.situation_prompt || '',
-            auto_reply_mode_enabled: conversation.auto_reply_mode_enabled || 0,
-            use_autorag_memory: conversation.use_autorag_memory || 0
+            auto_reply_mode_enabled: conversation.auto_reply_mode_enabled || 0
         });
     } catch (error) {
         await logError(error, env, 'Get Conversation Messages');
@@ -285,28 +284,3 @@ export async function deleteConversation(request, env, conversationId) {
     }
 }
 
-export async function toggleAutoragMemory(request, env) {
-    try {
-        const user = await getUserFromRequest(request, env);
-        if (!user) return errorResponse('Unauthorized', 401);
-
-        const { conversationId, useAutoragMemory } = await request.json();
-
-        if (!conversationId) return errorResponse('대화 ID가 필요합니다.', 400);
-
-        const conversation = await env.DB.prepare(
-            'SELECT id FROM conversations WHERE id = ? AND user_id = ?'
-        ).bind(conversationId, user.id).first();
-
-        if (!conversation) return errorResponse('대화를 찾을 수 없습니다.', 404);
-
-        await env.DB.prepare(
-            'UPDATE conversations SET use_autorag_memory = ? WHERE id = ?'
-        ).bind(useAutoragMemory ? 1 : 0, conversationId).run();
-
-        return jsonResponse({ success: true, use_autorag_memory: useAutoragMemory ? 1 : 0 });
-    } catch (error) {
-        await logError(error, env, 'Toggle AutoRAG Memory');
-        return errorResponse('AutoRAG 메모리 설정 변경에 실패했습니다.');
-    }
-}

@@ -14,7 +14,6 @@ import {
   serveUserCharacterImage
 } from './user-characters.js';
 import { handleMigration } from './migration.js';
-import { handleTTS, handleTTSTranslation, handleTTSTest, handleTTSDebug } from './tts.js';
 import { logError } from './utils.js';
 
 // Handler Imports
@@ -36,8 +35,7 @@ import {
   updateSituationPrompt,
   updateAutoReplyMode,
   deleteMessage,
-  deleteConversation,
-  toggleAutoragMemory
+  deleteConversation
 } from './handlers/conversation-handlers.js';
 import { getSekaiPreferences, updateSekaiPreferences } from './handlers/sekai.js';
 import {
@@ -120,11 +118,7 @@ async function handleAPI(request, env, path, ctx) {
     '/api/migration/kanade-conversations': { GET: handleMigration.getKanadeConversations },
     '/api/migration/start': { POST: handleMigration.startMigration },
     '/api/notice': { GET: getNotice },
-    '/api/conversations/autorag-memory': { POST: toggleAutoragMemory },
-    '/api/tts': { POST: handleTTS },
-    '/api/tts/translate': { POST: handleTTSTranslation },
-    '/api/tts/test': { POST: handleTTSTest },
-    '/api/tts/debug': { GET: handleTTSDebug },
+
     '/api/autorag/preview': { POST: handleAutoragPreview },
     '/api/autorag/status': { GET: handleAutoragStatus },
     '/api/autorag/full-content': { POST: handleAutoragFullContent },
@@ -194,6 +188,7 @@ async function handleAPI(request, env, path, ctx) {
     const conversationId = parseInt(match[1]);
     if (method === 'GET') return handleMigration.getKanadeConversationPreview(request, env, { id: conversationId });
   }
+
   if ((match = path.match(/^\/api\/characters\/(\d+)$/))) {
     const characterId = parseInt(match[1]);
     if (method === 'GET') return handleCharacters.getById(request, env, characterId);

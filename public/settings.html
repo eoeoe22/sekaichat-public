@@ -61,6 +61,7 @@
                     <button class="nav-link" id="v-pills-sekai-tab" data-bs-toggle="pill"
                         data-bs-target="#v-pills-sekai" type="button" role="tab"><i class="bi bi-globe"></i> 캐릭터 카테고리
                         관리</button>
+
                     <button class="nav-link" id="v-pills-api-tab" data-bs-toggle="pill" data-bs-target="#v-pills-api"
                         type="button" role="tab"><i class="bi bi-code-slash"></i> API 키</button>
                     <button class="nav-link" id="v-pills-migration-tab" data-bs-toggle="pill"
@@ -156,25 +157,6 @@
                             </div>
                             <button type="button" class="btn btn-primary" id="saveAutoCallBtn">저장</button>
 
-                            <hr>
-                            <h5><i class="bi bi-volume-up-fill"></i> TTS 언어 설정</h5>
-                            <div class="mb-3">
-                                <label class="form-label">TTS 음성 언어</label>
-                                <div class="btn-group w-100" role="group" id="ttsLanguageGroup">
-                                    <input type="radio" class="btn-check" name="ttsLanguage" id="ttsLanguageKr"
-                                        value="kr">
-                                    <label class="btn btn-outline-primary" for="ttsLanguageKr">한국어 (원본)</label>
-
-                                    <input type="radio" class="btn-check" name="ttsLanguage" id="ttsLanguageJp"
-                                        value="jp" checked>
-                                    <label class="btn btn-outline-primary" for="ttsLanguageJp">일본어 (번역)</label>
-                                </div>
-                                <div class="form-text">
-                                    한국어: 원본 텍스트를 그대로 TTS로 생성<br>
-                                    일본어: 텍스트를 일본어로 번역 후 TTS에 전달(권장)
-                                </div>
-                            </div>
-                            <button type="button" class="btn btn-primary" id="saveTtsLanguageBtn">TTS 언어 저장</button>
 
                         </div>
                     </div>
@@ -187,6 +169,7 @@
                             <button id="saveSekaiSettingsBtn" class="btn btn-primary mt-3">설정 저장</button>
                         </div>
                     </div>
+
                     <!-- API 키 -->
                     <div class="tab-pane fade" id="v-pills-api" role="tabpanel">
                         <div class="form-section">
